@@ -23,7 +23,7 @@ export class Mutant implements Mutable {
   public readonly replacementCode: string;
   public readonly replacement: types.Node;
   public readonly mutatorName: string;
-  public readonly ignoreReason: string | undefined;
+  public ignoreReason: string | undefined;
 
   constructor(
     public readonly id: string,

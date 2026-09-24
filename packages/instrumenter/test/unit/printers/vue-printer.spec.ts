@@ -3,7 +3,10 @@ import { promises as fsPromises } from 'fs';
 import { expect } from 'chai';
 import sinon from 'sinon';
 
-import { print } from '../../../src/printers/vue-printer.js';
+import {
+  generateTemplateExpression,
+  print,
+} from '../../../src/printers/vue-printer.js';
 import {
   PrinterContext,
   print as printAny,
@@ -176,6 +179,26 @@ describe('vue-printer', () => {
         -'}}</p></template>'.length,
       );
       expect(interpolation).not.include('}}');
+    });
+
+    it('should print the mutants of nested object literals in a call inside an interpolation', async () => {
+      const output = await instrument(
+        '<template><p>{{ fn({ a: { b: 1 } }) }}</p></template>\n' +
+          SCRIPT_SETUP,
+      );
+
+      expect(templateOf(output)).eq(
+        `<template><p>{{ fn(stryMutAct_9fa48("1") ? {} : (stryCov_9fa48("1"), { a: stryMutAct_9fa48("2") ? {} : (stryCov_9fa48("2"), { b: 1 }) })) }}</p></template>`,
+      );
+    });
+
+    it('should not generate an interpolation that contains `}}`', async () => {
+      const script = createTemplateScript({
+        ast: await parseCode('"}}"', 'foo.vue', AstFormat.JS),
+        isExpression: true,
+      });
+
+      expect(generateTemplateExpression(script)).undefined;
     });
 
     it('should print a member handler without placed mutants as it was written', async () => {

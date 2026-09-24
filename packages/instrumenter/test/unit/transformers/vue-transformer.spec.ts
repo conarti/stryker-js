@@ -556,6 +556,30 @@ const first = 1;
       expect(third).ok;
     });
 
+    it('should ignore the mutants of a template expression that cannot be printed back', async () => {
+      const vue =
+        await parseSfc(`<template><p>{{ first }}{{ second }}</p></template>
+<script setup>
+const first = 1;
+</script>
+`);
+      const [first, second] = vue.root.templateScripts;
+      const [statement] = second.ast.root.program.body;
+      (statement as types.ExpressionStatement).expression =
+        types.stringLiteral('}}');
+      planMutant(first, (path) => path.isIdentifier());
+      planMutant(second, (path) => path.isStringLiteral());
+
+      transformVue(vue, mutantCollector, context);
+
+      expect(vue.root.templateScripts).deep.eq([first]);
+      const [firstMutant, secondMutant] = mutantCollector.mutants;
+      expect(firstMutant.id).eq('0');
+      expect(firstMutant.ignoreReason).undefined;
+      expect(secondMutant.id).eq('1');
+      expect(secondMutant.ignoreReason).contains('cannot be put back');
+    });
+
     it('should place the header in a created module script when a mutant is placed in the template', async () => {
       const rawContent = `<template><p>{{ label }}</p></template>
 <script setup lang="ts">

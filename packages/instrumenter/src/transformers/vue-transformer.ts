@@ -13,6 +13,7 @@ import {
   VueSetupScript,
 } from '../syntax/index.js';
 import { placeHeader } from '../util/syntax-helpers.js';
+import { generateTemplateExpression } from '../printers/vue-printer.js';
 import { allMutators, type NodeMutator } from '../mutators/index.js';
 
 import { AstTransformer, TransformerContext } from './index.js';
@@ -31,6 +32,9 @@ const COMPILER_MACROS = Object.freeze([
   'defineSlots',
   'withDefaults',
 ]);
+
+const TEMPLATE_EXPRESSION_NOT_PRINTABLE_MSG =
+  'The mutated template expression cannot be put back in the template, it would contain the closing `}}` of an interpolation or the quote of its attribute.';
 
 const DEFINE_MODEL_NAME_MSG =
   'The model name of `defineModel` cannot be mutated, the vue compiler reads it to name the model prop and its update event.';
@@ -348,9 +352,24 @@ function transformTemplateScripts(
     } else {
       context.transform(script.ast, mutantCollector, expressionContext);
     }
-    return mutantCollector.mutants
+    const placedMutants = mutantCollector.mutants
       .slice(mutantsBefore)
-      .some((mutant) => !mutant.ignoreReason);
+      .filter((mutant) => !mutant.ignoreReason);
+    if (!placedMutants.length) {
+      return false;
+    }
+    /*
+     * The mutated expression is generated here the same way the printer does. When it cannot be put
+     * back in the template, the script is dropped, so its mutants are reported as ignored instead
+     * of surviving without ever running. They are already collected, which keeps the ids in order.
+     */
+    if (generateTemplateExpression(script) === undefined) {
+      placedMutants.forEach((mutant) => {
+        mutant.ignoreReason = TEMPLATE_EXPRESSION_NOT_PRINTABLE_MSG;
+      });
+      return false;
+    }
+    return true;
   });
   return vue.root.templateScripts.length > 0;
 }
