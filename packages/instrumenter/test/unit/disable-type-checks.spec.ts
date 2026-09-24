@@ -289,6 +289,23 @@ describe(disableTypeChecks.name, () => {
     });
   });
 
+  describe('with Vue ast format', () => {
+    it('should prefix the script blocks, `<script setup>` included, and leave the template expressions as they were', async () => {
+      const template =
+        '<template><p v-if="a && d" :title="b">{{ c }}</p></template>';
+      const inputFile = {
+        name: 'foo.vue',
+        content: `${template}<script>foo();</script><script setup>bar();</script>`,
+        mutate: true,
+      };
+      const actual = await disableTypeChecks(inputFile, { plugins: null });
+      assertions.expectTextFileEqual(actual, {
+        name: 'foo.vue',
+        content: `${template}<script>\n// @ts-nocheck\nfoo();\n</script><script setup>\n// @ts-nocheck\nbar();\n</script>`,
+      });
+    });
+  });
+
   describe('with unsupported AST format', () => {
     it('should silently ignore the file', async () => {
       const expectedFile = {

@@ -8,7 +8,9 @@ import {
   AstFormat,
   HtmlAst,
   ScriptAst,
+  SvelteAst,
   TemplateScript,
+  VueAst,
 } from './syntax/index.js';
 
 const commentDirectiveRegEx = /^(\s*)@(ts-[a-z-]+).*$/;
@@ -49,14 +51,9 @@ export async function disableTypeChecks(
     case AstFormat.Html:
       return { ...file, content: disableTypeCheckingInHtml(ast) };
     case AstFormat.Svelte:
+      return { ...file, content: disableTypeCheckingInSvelte(ast) };
     case AstFormat.Vue:
-      return {
-        ...file,
-        content: disableTypeCheckingInTemplateScripts(ast.rawContent, [
-          ast.root.moduleScript,
-          ...ast.root.additionalScripts,
-        ]),
-      };
+      return { ...file, content: disableTypeCheckingInVue(ast) };
   }
 }
 
@@ -107,6 +104,24 @@ function disableTypeCheckingInHtml(ast: HtmlAst): string {
   }
   html += ast.rawContent.substring(currentIndex);
   return html;
+}
+
+function disableTypeCheckingInSvelte(ast: SvelteAst): string {
+  return disableTypeCheckingInTemplateScripts(ast.rawContent, [
+    ast.root.moduleScript,
+    ...ast.root.additionalScripts,
+  ]);
+}
+
+/**
+ * Only the script blocks are prefixed, `<script setup>` included. The template expressions are left
+ * exactly as they were, a comment inside a `v-if` or `{{ }}` would break the template.
+ */
+function disableTypeCheckingInVue(ast: VueAst): string {
+  return disableTypeCheckingInTemplateScripts(ast.rawContent, [
+    ast.root.moduleScript,
+    ...ast.root.additionalScripts,
+  ]);
 }
 
 function disableTypeCheckingInTemplateScripts(
