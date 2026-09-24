@@ -11,6 +11,7 @@
     <button class="call" @click="select(selected)">call</button>
     <button class="event" @click="handle($event)">event</button>
     <button class="multiple" @click="count++; select(selected)">multiple</button>
+    <button v-for="(entry, index) in forms" :key="index" class="scoped" @click="entry.submit">scoped</button>
     <form @submit.prevent="form.submit"><button class="prevent">prevent</button></form>
     <input class="enter" @keyup.enter="submit" />
     <Transition @before-enter="hooks.beforeEnter">
@@ -30,6 +31,7 @@ interface Handler {
 const props = defineProps<{
   form: Handler;
   maybeForm?: Handler;
+  forms: Handler[];
   hooks: { beforeEnter(element: Element): void };
   selected: number;
   submit(...args: unknown[]): void;

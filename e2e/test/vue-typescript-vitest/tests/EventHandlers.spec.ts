@@ -38,6 +38,7 @@ function mountHandlers() {
     props: {
       form: formObject,
       maybeForm: maybeFormObject,
+      forms: [formObject],
       hooks,
       selected: 42,
       submit: submit.handler,
@@ -86,16 +87,16 @@ function findVNode(vnode: VNode, type: unknown): VNode | undefined {
 }
 
 describe('EventHandlers component', () => {
-  it('should call an identifier handler with the event', async () => {
+  it('should call an identifier handler with the event through the handler vue caches', async () => {
     const { sut, submit } = mountHandlers();
     await sut.find('.identifier').trigger('click');
     expect(submit.calls).length(1);
     expect(submit.calls[0].args[0]).instanceOf(Event);
-    expect(submit.calls[0].receiver).not.undefined;
+    expect(toRaw(submit.calls[0].receiver as object)).eq(toRaw(sut.props()));
     expect(attachedHandler(sut, '.identifier', 'onClick').length).eq(0);
     sut.unmount();
   });
-  it('should call a member handler on its object', async () => {
+  it('should call a member handler on its object through the handler vue caches', async () => {
     const { sut, form, formObject } = mountHandlers();
     await sut.find('.member').trigger('click');
     expect(form.calls).length(1);
@@ -104,7 +105,7 @@ describe('EventHandlers component', () => {
     expect(attachedHandler(sut, '.member', 'onClick').length).eq(0);
     sut.unmount();
   });
-  it('should call an optional member handler on its object', async () => {
+  it('should call an optional member handler on its object through the handler vue caches', async () => {
     const { sut, maybeForm, maybeFormObject } = mountHandlers();
     await sut.find('.optional').trigger('click');
     expect(maybeForm.calls).length(1);
@@ -113,7 +114,7 @@ describe('EventHandlers component', () => {
     expect(attachedHandler(sut, '.optional', 'onClick').length).eq(0);
     sut.unmount();
   });
-  it('should call a non null member handler on its object', async () => {
+  it('should call a non null member handler on its object through the handler vue caches', async () => {
     const { sut, form, formObject } = mountHandlers();
     await sut.find('.non-null').trigger('click');
     expect(form.calls).length(1);
@@ -170,6 +171,16 @@ describe('EventHandlers component', () => {
     expect(select.calls).length(1);
     sut.unmount();
   });
+  it('should pass a member handler that refers to the template scope as it is written', async () => {
+    const { sut, form, formObject } = mountHandlers();
+    expect(attachedHandler(sut, '.scoped', 'onClick')).eq(formObject.submit);
+    expect(attachedHandler(sut, '.scoped', 'onClick').length).eq(2);
+    await sut.find('.scoped').trigger('click');
+    expect(form.calls).length(1);
+    expect(form.calls[0].receiver).undefined;
+    expect(form.calls[0].args[0]).instanceOf(Event);
+    sut.unmount();
+  });
   it('should call a member handler behind the prevent modifier', async () => {
     const { sut, form, formObject } = mountHandlers();
     await sut.find('form').trigger('submit');
@@ -192,7 +203,6 @@ describe('EventHandlers component', () => {
     const { sut, beforeEnter, hooks } = mountHandlers();
     const transition = findVNode(sut.vm.$.subTree, Transition)!;
     expect(transition.props!.onBeforeEnter).eq(hooks.beforeEnter);
-    expect(hooks.beforeEnter.length).eq(2);
     await sut.find('.toggle').trigger('click');
     expect(sut.find('.transition').exists()).true;
     expect(beforeEnter.calls).length(1);

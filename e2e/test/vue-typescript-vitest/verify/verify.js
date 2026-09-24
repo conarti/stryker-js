@@ -18,11 +18,11 @@ const expectedTemplateMutants = Object.freeze({
  * @returns {{ start: number, end: number }} the lines of the opening and closing tag of the template block
  */
 function templateLines(source) {
-  const lines = source.split('\n');
-  return {
-    start: lines.findIndex((line) => line.startsWith('<template>')) + 1,
-    end: lines.findLastIndex((line) => line.startsWith('</template>')) + 1,
-  };
+  const lines = source.split(/\r?\n/);
+  const start = lines.findIndex((line) => /^<template[\s>]/.test(line)) + 1;
+  const end = lines.findLastIndex((line) => /^<\/template>/.test(line)) + 1;
+  expect(start > 0 && end > start, 'the template block is found').true;
+  return { start, end };
 }
 
 describe('Verify stryker has ran correctly', () => {
