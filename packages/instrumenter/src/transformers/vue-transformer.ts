@@ -8,14 +8,17 @@ import {
   AstFormat,
   Range,
   ScriptAst,
+  ScriptFormat,
   TemplateScript,
   VueAst,
   VueSetupScript,
 } from '../syntax/index.js';
 import { placeHeader } from '../util/syntax-helpers.js';
+import { allMutators, type NodeMutator } from '../mutators/index.js';
 
-import { AstTransformer } from './index.js';
+import { AstTransformer, TransformerContext } from './index.js';
 import { MutantCollector } from './mutant-collector.js';
+import { transformBabel } from './babel-transformer.js';
 
 /**
  * The compiler macros of which the arguments need to stay statically analyzable.
@@ -159,6 +162,8 @@ export const transformVue: AstTransformer<AstFormat.Vue> = (
     return;
   }
 
+  logSkipReasons(vue, context);
+
   /*
    * The macro arguments have to be located up front. Placing mutants rewrites the tree while
    * it is being traversed, so afterwards the original nodes can no longer be found.
@@ -202,11 +207,18 @@ export const transformVue: AstTransformer<AstFormat.Vue> = (
     }
   }
 
-  if (hasMutantInsideMacroArguments()) {
+  const hasTemplateMutants = transformTemplateScripts(
+    vue,
+    mutantCollector,
+    context,
+  );
+
+  if (hasTemplateMutants || hasMutantInsideMacroArguments()) {
     /*
      * The compiler reads the macro arguments statically, which it can only do while they sit at
      * the top level of the `<script setup>` block. Mutation switching wraps them in a function,
      * making the header unreachable from there, so it goes into a module level script instead.
+     * The same goes for the template, which is compiled outside of the `<script setup>` block.
      */
     placeHeader(moduleScriptOf(vue, setup).ast.root);
   } else {
@@ -234,6 +246,13 @@ export const transformVue: AstTransformer<AstFormat.Vue> = (
       );
   }
 };
+
+/**
+ * `transformBabel` takes the mutators as a trailing parameter, which its `AstTransformer` type leaves out.
+ */
+const transformBabelWithMutators = transformBabel as (
+  ...args: [...Parameters<AstTransformer<ScriptFormat>>, NodeMutator[]]
+) => void;
 
 /**
  * Collects the range of every argument of every compiler macro call.
@@ -292,10 +311,12 @@ function moduleScriptOf(vue: VueAst, setup: VueSetupScript): TemplateScript {
     originFileName: vue.originFileName,
   };
   vue.rawContent = `${moduleScript}${vue.rawContent}`;
-  vue.root.additionalScripts.forEach((script) => {
-    script.range.start += moduleScript.length;
-    script.range.end += moduleScript.length;
-  });
+  [...vue.root.additionalScripts, ...vue.root.templateScripts].forEach(
+    (script) => {
+      script.range.start += moduleScript.length;
+      script.range.end += moduleScript.length;
+    },
+  );
   vue.root.moduleScript = {
     ast,
     range: {
@@ -305,4 +326,95 @@ function moduleScriptOf(vue: VueAst, setup: VueSetupScript): TemplateScript {
     isExpression: false,
   };
   return vue.root.moduleScript;
+}
+
+/**
+ * Transforms the expressions of the template. Only the ones that end up with a placed mutant
+ * are kept, so the printer leaves every other expression exactly as it was written.
+ * @returns whether a mutant was placed in the template
+ */
+function transformTemplateScripts(
+  vue: VueAst,
+  mutantCollector: I<MutantCollector>,
+  context: TransformerContext,
+): boolean {
+  const expressionContext: TransformerContext = {
+    ...context,
+    isExpressionContext: true,
+    options: { ...context.options, noHeader: true },
+  };
+  vue.root.templateScripts = vue.root.templateScripts.filter((script) => {
+    const mutantsBefore = mutantCollector.mutants.length;
+    if (script.protectedNodes) {
+      transformBabelWithMutators(
+        script.ast,
+        mutantCollector,
+        expressionContext,
+        guardMutators(protectedNodesOf(script.protectedNodes, script.ast)),
+      );
+    } else {
+      context.transform(script.ast, mutantCollector, expressionContext);
+    }
+    return mutantCollector.mutants
+      .slice(mutantsBefore)
+      .some((mutant) => !mutant.ignoreReason);
+  });
+  return vue.root.templateScripts.length > 0;
+}
+
+/**
+ * Adds the callee of a synthesized `(...args) => handler(...args)` wrapper to the protected nodes.
+ * That callee is the handler as it was written, vue classifies it by its shape, so it has to stay intact.
+ */
+function protectedNodesOf(
+  protectedNodes: WeakSet<types.Node>,
+  ast: ScriptAst,
+): WeakSet<types.Node> {
+  const [statement] = ast.root.program.body;
+  if (
+    types.isExpressionStatement(statement) &&
+    types.isArrowFunctionExpression(statement.expression) &&
+    protectedNodes.has(statement.expression) &&
+    (types.isCallExpression(statement.expression.body) ||
+      types.isOptionalCallExpression(statement.expression.body)) &&
+    protectedNodes.has(statement.expression.body)
+  ) {
+    protectedNodes.add(statement.expression.body.callee);
+  }
+  return protectedNodes;
+}
+
+/**
+ * Keeps the mutators as they are, `name` and `filter` included, but lets them skip the protected nodes.
+ * The nodes below a protected node are still mutated.
+ */
+function guardMutators(protectedNodes: WeakSet<types.Node>): NodeMutator[] {
+  return allMutators.map((mutator) => ({
+    ...mutator,
+    *mutate(path, mutatorContext) {
+      if (!protectedNodes.has(path.node)) {
+        yield* mutator.mutate(path, mutatorContext);
+      }
+    },
+  }));
+}
+
+/**
+ * Warns once per file about the parts of the template that are not mutated.
+ */
+function logSkipReasons(vue: VueAst, { logger }: TransformerContext): void {
+  const { templateSkipReason, templateExpressionSkipReasons } = vue.root;
+  if (templateSkipReason) {
+    logger.warn(
+      `The template of ${vue.originFileName} is not mutated: ${templateSkipReason}`,
+    );
+  }
+  if (templateExpressionSkipReasons.length) {
+    logger.warn(
+      `${templateExpressionSkipReasons.length} template expression(s) of ${vue.originFileName} are not mutated. Run with log level debug to see why.`,
+    );
+    if (logger.isDebugEnabled()) {
+      logger.debug(templateExpressionSkipReasons.join('\n'));
+    }
+  }
 }

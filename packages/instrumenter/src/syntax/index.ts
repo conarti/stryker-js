@@ -125,6 +125,7 @@ export interface VueSetupScript {
 /**
  * Represents a svelte script or binding expression
  * We've taken a shortcut here, instead of representing the entire AST, we're only representing the script tags and expression bindings.
+ * For a vue template expression the node positions are relative to the expression text, which for an object literal starts one character before `range.start`.
  */
 export interface TemplateScript {
   ast: ScriptAst;

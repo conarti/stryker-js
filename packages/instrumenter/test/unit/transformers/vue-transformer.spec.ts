@@ -1,5 +1,6 @@
 import { expect } from 'chai';
 import sinon from 'sinon';
+import { testInjector } from '@stryker-mutator/test-helpers';
 import { notEmpty } from '@stryker-mutator/util';
 
 import { types, type NodePath } from '@babel/core';
@@ -519,6 +520,218 @@ const open = defineSomethingElse('open');
       return mutants[0];
     }
   });
+
+  describe('template expressions', () => {
+    it('should transform them after the script blocks as expressions without a header', async () => {
+      const vue = await parseSfc(`<template><p>{{ label }}</p></template>
+<script setup>
+const label = 'hello';
+</script>
+`);
+      const [templateScript] = vue.root.templateScripts;
+
+      transformVue(vue, mutantCollector, context);
+
+      sinon.assert.calledTwice(context.transform);
+      const [ast, , usedContext] = context.transform.secondCall.args;
+      expect(ast).eq(templateScript.ast);
+      expect(usedContext.isExpressionContext).true;
+      expect(usedContext.options.noHeader).true;
+    });
+
+    it('should only keep the template expressions in which a mutant was placed', async () => {
+      const vue =
+        await parseSfc(`<template><p :title="first">{{ second }}{{ third }}</p></template>
+<script setup>
+const first = 1;
+</script>
+`);
+      const [first, second, third] = vue.root.templateScripts;
+      planMutant(first, (path) => path.isIdentifier());
+      planMutant(second, (path) => path.isIdentifier(), 'ignored for a reason');
+
+      transformVue(vue, mutantCollector, context);
+
+      expect(vue.root.templateScripts).deep.eq([first]);
+      expect(third).ok;
+    });
+
+    it('should place the header in a created module script when a mutant is placed in the template', async () => {
+      const rawContent = `<template><p>{{ label }}</p></template>
+<script setup lang="ts">
+const label = 'hello';
+</script>
+`;
+      const vue = await parseSfc(rawContent);
+      const [templateScript] = vue.root.templateScripts;
+      const rangeBefore = { ...templateScript.range };
+      planMutant(templateScript, (path) => path.isIdentifier());
+
+      transformVue(vue, mutantCollector, context);
+
+      const insertedLength = '<script lang="ts">\n\n</script>\n'.length;
+      expect(vue.rawContent).eq(
+        `<script lang="ts">\n\n</script>\n${rawContent}`,
+      );
+      expect(scriptsWithHeader(vue)).deep.eq([vue.root.moduleScript]);
+      expect(templateScript.range).deep.eq({
+        start: rangeBefore.start + insertedLength,
+        end: rangeBefore.end + insertedLength,
+      });
+    });
+
+    it('should place the header in a created module script when a mutant is inside the arguments of `defineModel`', async () => {
+      const vue = await parseSfc(`<script setup>
+const open = defineModel('open', { default: false });
+</script>
+`);
+      planMutant(vue.root.setup!.script, (path) => path.isBooleanLiteral());
+
+      transformVue(vue, mutantCollector, context);
+
+      expect(scriptsWithHeader(vue)).deep.eq([vue.root.moduleScript]);
+    });
+
+    it('should not create a module script when only the script blocks have mutants', async () => {
+      const rawContent = `<template><p>{{ label }}</p></template>
+<script setup>
+const label = 'hello';
+</script>
+`;
+      const vue = await parseSfc(rawContent);
+      const setupScript = vue.root.setup!.script;
+      planMutant(setupScript, (path) => path.isStringLiteral());
+
+      transformVue(vue, mutantCollector, context);
+
+      expect(vue.root.moduleScript).undefined;
+      expect(vue.rawContent).eq(rawContent);
+      expect(scriptsWithHeader(vue)).deep.eq([setupScript]);
+    });
+
+    it('should leave an SFC without a `<script setup>` block as it was', async () => {
+      const rawContent = `<template><p>{{ label }}</p></template>
+<script>
+export default { data: () => ({ label: 'hello' }) };
+</script>
+`;
+      const vue = await parseSfc(rawContent);
+
+      transformVue(vue, mutantCollector, context);
+
+      expect(vue.rawContent).eq(rawContent);
+      sinon.assert.calledOnce(context.transform);
+      expect(context.transform.firstCall.args[2].options.noHeader).undefined;
+      sinon.assert.notCalled(testInjector.logger.warn);
+    });
+
+    it('should report the position of a mutant in an object literal binding in the original file', async () => {
+      const vue = await parseSfc(
+        '<template><p :class="{ active: a && b }"></p></template>\n<script setup>\nconst x = 1;\n</script>\n',
+      );
+
+      transform(vue, mutantCollector, transformerContextStub());
+
+      const [mutant] = templateMutantsOf('LogicalOperator');
+      expect(mutant.toApiMutant().location).deep.eq({
+        start: { line: 0, column: 31 },
+        end: { line: 0, column: 37 },
+      });
+    });
+  });
+
+  describe('`v-on` handlers', () => {
+    it('should not mutate the root of a function handler, but should mutate what is inside of it', async () => {
+      const vue = await parseSfc(
+        '<template><button @click="() => submit(a + b)"></button></template>\n<script setup>\nconst x = 1;\n</script>\n',
+      );
+
+      transform(vue, mutantCollector, transformerContextStub());
+
+      expect(templateMutantsOf('ArrowFunction')).lengthOf(0);
+      expect(templateMutantsOf('ArithmeticOperator')).lengthOf(1);
+    });
+
+    for (const handler of [
+      'obj.submit',
+      'items.reverse',
+      'submit',
+      'obj?.handler',
+    ]) {
+      it(`should not mutate the member handler \`${handler}\` nor the wrapper around it`, async () => {
+        const vue = await parseSfc(
+          `<template><button @click="${handler}"></button></template>\n<script setup>\nconst x = 1;\n</script>\n`,
+        );
+
+        transform(vue, mutantCollector, transformerContextStub());
+
+        /* `obj?.handler` is the protected root itself, so not even its optional chaining is mutated */
+        expect(mutantCollector.mutants).lengthOf(0);
+        expect(vue.root.templateScripts).lengthOf(0);
+      });
+    }
+
+    it('should still ignore the excluded mutations', async () => {
+      const vue = await parseSfc(
+        '<template><button @click="() => submit(a + b)"></button></template>\n<script setup>\nconst x = 1;\n</script>\n',
+      );
+
+      const excludingContext = transformerContextStub();
+      excludingContext.options.excludedMutations = ['ArithmeticOperator'];
+
+      transform(vue, mutantCollector, excludingContext);
+
+      const [mutant] = templateMutantsOf('ArithmeticOperator');
+      expect(mutant.ignoreReason).eq(
+        'Ignored because of excluded mutation "ArithmeticOperator"',
+      );
+    });
+  });
+
+  describe('warnings', () => {
+    it('should warn once when the whole template is skipped', async () => {
+      const vue = await parseSfc(
+        '<template lang="pug">p {{ a }}</template>\n<script setup>\nconst x = 1;\n</script>\n',
+      );
+
+      transformVue(vue, mutantCollector, context);
+
+      sinon.assert.calledOnce(testInjector.logger.warn);
+      sinon.assert.calledWithMatch(
+        testInjector.logger.warn,
+        `The template of ${originFileName} is not mutated`,
+      );
+    });
+
+    it('should warn once with the number of skipped expressions', async () => {
+      const vue = await parseSfc(
+        '<template><p :title=a :id=b>{{ c }}</p></template>\n<script setup>\nconst x = 1;\n</script>\n',
+      );
+
+      transformVue(vue, mutantCollector, context);
+
+      sinon.assert.calledOnceWithExactly(
+        testInjector.logger.warn,
+        `2 template expression(s) of ${originFileName} are not mutated. Run with log level debug to see why.`,
+      );
+    });
+
+    it('should not warn when nothing is skipped', async () => {
+      const vue = await parseSfc(
+        '<template><p>{{ c }}</p></template>\n<script setup>\nconst x = 1;\n</script>\n',
+      );
+
+      transformVue(vue, mutantCollector, context);
+
+      sinon.assert.notCalled(testInjector.logger.warn);
+    });
+  });
+
+  function templateMutantsOf(mutatorName: string): Mutant[] {
+    return mutantCollector.mutants.filter(
+      (mutant) => mutant.mutatorName === mutatorName,
+    );
+  }
 
   async function parseSfc(rawContent: string): Promise<VueAst> {
     const vue = await parseVue(rawContent, originFileName, {
