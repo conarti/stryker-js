@@ -52,7 +52,7 @@ function stryMutAct_9fa48(id) {
 
 </script>
 <template>
-  <p :class=\\"{ active: isActive }\\">{{ label }}</p>
+  <p :class=\\"stryMutAct_9fa48('7') ? {} : (stryCov_9fa48('7'), { active: isActive })\\">{{ label }}</p>
 </template>
 
 <script setup lang=\\"ts\\">
