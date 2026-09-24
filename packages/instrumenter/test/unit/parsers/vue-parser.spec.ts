@@ -8,6 +8,7 @@ import sinon from 'sinon';
 import { notEmpty } from '@stryker-mutator/util';
 
 import { types } from '@babel/core';
+import generate from '@babel/generator';
 
 import {
   checkVueCompiler,
@@ -796,6 +797,30 @@ describe('vue-parser', () => {
         expect(call.optional).false;
         expect(call.callee.type).eq('OptionalMemberExpression');
         expect(script.protectedNodes!.has(call.callee)).false;
+      });
+
+      (
+        [
+          [
+            'args.submit',
+            '(...stryArgs_9fa48) => args.submit(...stryArgs_9fa48)',
+          ],
+          ['args', '(...stryArgs_9fa48) => args(...stryArgs_9fa48)'],
+          [
+            'obj?.submit',
+            '(...stryArgs_9fa48) => obj?.submit(...stryArgs_9fa48)',
+          ],
+          [
+            'obj!.submit',
+            '(...stryArgs_9fa48) => obj!.submit(...stryArgs_9fa48)',
+          ],
+        ] as const
+      ).forEach(([handler, expected]) => {
+        it(`should wrap \`${handler}\` with a reserved parameter name`, async () => {
+          const script = await parseHandler(handler);
+
+          expect(generate(expressionOf(script)).code).eq(expected);
+        });
       });
 
       it('should protect the root of a function handler without wrapping it', async () => {

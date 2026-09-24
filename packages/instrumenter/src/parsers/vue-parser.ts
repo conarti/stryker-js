@@ -105,6 +105,8 @@ const TS_WRAPPER_TYPES: ReadonlyArray<types.Node['type']> = Object.freeze([
   'TSSatisfiesExpression',
   'TSTypeAssertion',
 ]);
+/* A reserved name, so the wrapper never shadows a variable the handler refers to, such as `args.submit` */
+const HANDLER_ARGUMENTS_NAME = 'stryArgs_9fa48';
 const HTML_ENTITY = /&(?:#\d+|#x[\da-f]+|[a-z][\da-z]*);/i;
 const SHAPE_CHECK_SNIPPET =
   '<template><li v-for="item in items"></li></template>';
@@ -472,19 +474,21 @@ function isMemberHandler(node: types.Expression): boolean {
 }
 
 /**
- * Builds `(...args) => original(...args)`, so vue keeps calling the handler once a mutation switch is placed around it.
+ * Builds `(...stryArgs_9fa48) => original(...stryArgs_9fa48)`, so vue keeps calling the handler once a mutation switch is placed around it.
  * The synthesized nodes get the location of the original, mutants in them report the range of the attribute value.
  */
 function wrapMemberHandler(
   original: types.Expression,
   handler: types.Expression,
 ): { arrow: types.ArrowFunctionExpression; call: types.Expression } {
-  const spreadArgs = [types.spreadElement(types.identifier('args'))];
+  const spreadArgs = [
+    types.spreadElement(types.identifier(HANDLER_ARGUMENTS_NAME)),
+  ];
   const call = types.isOptionalMemberExpression(handler)
     ? types.optionalCallExpression(original, spreadArgs, false)
     : types.callExpression(original, spreadArgs);
   const arrow = types.arrowFunctionExpression(
-    [types.restElement(types.identifier('args'))],
+    [types.restElement(types.identifier(HANDLER_ARGUMENTS_NAME))],
     call,
   );
   for (const node of [arrow, arrow.params[0], call, ...call.arguments]) {

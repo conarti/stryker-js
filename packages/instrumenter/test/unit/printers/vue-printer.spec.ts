@@ -194,7 +194,7 @@ describe('vue-printer', () => {
       );
 
       expect(templateOf(output)).eq(
-        `<template><button @click="(...args) => items[stryMutAct_9fa48('0') ? a - b : (stryCov_9fa48('0'), a + b)](...args)"></button></template>`,
+        `<template><button @click="(...stryArgs_9fa48) => items[stryMutAct_9fa48('0') ? a - b : (stryCov_9fa48('0'), a + b)](...stryArgs_9fa48)"></button></template>`,
       );
     });
 

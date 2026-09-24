@@ -356,7 +356,7 @@ function transformTemplateScripts(
 }
 
 /**
- * Adds the callee of a synthesized `(...args) => handler(...args)` wrapper to the protected nodes.
+ * Adds the callee of a synthesized `(...stryArgs_9fa48) => handler(...stryArgs_9fa48)` wrapper to the protected nodes.
  * That callee is the handler as it was written, vue classifies it by its shape, so it has to stay intact.
  */
 function protectedNodesOf(
