@@ -9,6 +9,7 @@ import {
   TemplateScript,
   Range,
   VueAst,
+  VueRootNode,
 } from '../../src/syntax/index.js';
 import { Mutant, Mutable } from '../../src/mutant.js';
 import { ParserOptions } from '../../src/parsers/index.js';
@@ -104,7 +105,9 @@ export function createSvelteAst(overrides?: Partial<SvelteAst>): SvelteAst {
   };
 }
 
-export function createVueAst(overrides?: Partial<VueAst>): VueAst {
+export function createVueAst(
+  overrides?: Partial<Omit<VueAst, 'root'>> & { root?: Partial<VueRootNode> },
+): VueAst {
   const rawContent =
     overrides?.rawContent ??
     '<script>let name = "temp"</script><h1>hello!</h1>';
@@ -113,12 +116,16 @@ export function createVueAst(overrides?: Partial<VueAst>): VueAst {
     format: AstFormat.Vue,
     originFileName,
     rawContent,
+    ...overrides,
     root: {
       moduleScript: overrides?.root?.moduleScript,
       additionalScripts: overrides?.root?.additionalScripts ?? [],
       setup: overrides?.root?.setup,
+      templateScripts: overrides?.root?.templateScripts ?? [],
+      templateSkipReason: overrides?.root?.templateSkipReason,
+      templateExpressionSkipReasons:
+        overrides?.root?.templateExpressionSkipReasons ?? [],
     },
-    ...overrides,
   };
 }
 

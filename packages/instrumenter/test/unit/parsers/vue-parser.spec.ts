@@ -1,14 +1,29 @@
 import { promises as fsPromises } from 'fs';
+import os from 'os';
+import path from 'path';
+import { createRequire } from 'module';
 
 import { expect } from 'chai';
 import sinon from 'sinon';
 import { notEmpty } from '@stryker-mutator/util';
 
-import { parse } from '../../../src/parsers/vue-parser.js';
+import { types } from '@babel/core';
+
+import {
+  checkVueCompiler,
+  loadVueCompiler,
+  parse,
+  VueCompilerSfc,
+} from '../../../src/parsers/vue-parser.js';
 import { parse as htmlParse } from '../../../src/parsers/html-parser.js';
 import { createParser } from '../../../src/parsers/index.js';
 import { ParserContext } from '../../../src/parsers/parser-context.js';
-import { AstFormat, Range } from '../../../src/syntax/index.js';
+import {
+  AstFormat,
+  Range,
+  TemplateScript,
+  VueAst,
+} from '../../../src/syntax/index.js';
 import {
   createJSAst,
   createParserOptions,
@@ -257,6 +272,613 @@ describe('vue-parser', () => {
         .filter(notEmpty)
         .map(({ range }) => range),
     ).deep.eq(expectedRanges);
+  });
+
+  describe('template expressions', () => {
+    let context: ParserContext;
+
+    beforeEach(() => {
+      context = realParserContext();
+    });
+
+    async function parseTemplate(
+      template: string,
+      scriptSetup = '<script setup>const a = 1;</script>',
+    ): Promise<{ vueAst: VueAst; text: string }> {
+      const text = `<template>${template}</template>\n${scriptSetup}\n`;
+      return { vueAst: await parse(text, 'App.vue', context), text };
+    }
+
+    async function parseResource(
+      name: string,
+      transform = (content: string) => content,
+    ): Promise<{ vueAst: VueAst; text: string }> {
+      const fileName = resolveParserTestResource(name);
+      const text = transform(await fsPromises.readFile(fileName, 'utf8'));
+      return { vueAst: await parse(text, fileName, context), text };
+    }
+
+    function slices(text: string, scripts: TemplateScript[]): string[] {
+      return scripts.map(({ range }) => text.slice(range.start, range.end));
+    }
+
+    function expressionOf(script: TemplateScript): types.Expression {
+      const [statement] = script.ast.root.program.body;
+      return (statement as types.ExpressionStatement).expression;
+    }
+
+    describe('group A', () => {
+      (
+        [
+          ['an interpolation', '<p>{{ message }}</p>', 'message', 'Identifier'],
+          ['v-if', '<p v-if="a > b"></p>', 'a > b', 'BinaryExpression'],
+          [
+            'v-else-if',
+            '<p v-if="a"></p><p v-else-if="b || c"></p>',
+            'b || c',
+            'LogicalExpression',
+          ],
+          ['v-show', '<p v-show="!hidden"></p>', '!hidden', 'UnaryExpression'],
+          ['v-html', '<p v-html="html"></p>', 'html', 'Identifier'],
+          ['v-text', '<p v-text="`${a}!`"></p>', '`${a}!`', 'TemplateLiteral'],
+          [
+            'v-bind in full notation',
+            '<p v-bind:title="a + b"></p>',
+            'a + b',
+            'BinaryExpression',
+          ],
+          [
+            'v-bind in shorthand notation',
+            '<p :title="a.b"></p>',
+            'a.b',
+            'MemberExpression',
+          ],
+          [
+            'v-bind of class with an object literal',
+            '<p :class="{ active: isActive }"></p>',
+            '{ active: isActive }',
+            'ObjectExpression',
+          ],
+          [
+            'v-bind of style with an object literal',
+            `<p :style="{ color: textColor, 'font-size': size + 'px' }"></p>`,
+            `{ color: textColor, 'font-size': size + 'px' }`,
+            'ObjectExpression',
+          ],
+          [
+            'v-on in full notation',
+            '<p v-on:click="count++"></p>',
+            'count++',
+            'UpdateExpression',
+          ],
+          [
+            'v-on in shorthand notation',
+            '<p @click="select(id)"></p>',
+            'select(id)',
+            'CallExpression',
+          ],
+          [
+            'the source of v-for',
+            '<p v-for="(item, index) in items.slice(1)"></p>',
+            'items.slice(1)',
+            'CallExpression',
+          ],
+        ] as const
+      ).forEach(([description, template, expected, type]) => {
+        it(`should collect ${description}`, async () => {
+          const { vueAst, text } = await parseTemplate(template);
+
+          const { templateScripts } = vueAst.root;
+          const script = templateScripts[templateScripts.length - 1];
+          expect(text.slice(script.range.start, script.range.end)).eq(expected);
+          expect(script.isExpression).true;
+          expect(expressionOf(script).type).eq(type);
+          expect(vueAst.root.templateSkipReason).undefined;
+          expect(vueAst.root.templateExpressionSkipReasons).deep.eq([]);
+        });
+      });
+
+      it('should derive the quote of a directive from the attribute delimiter', async () => {
+        const { vueAst } = await parseTemplate(
+          `<p :title="a" :lang='b'>{{ c }}</p>`,
+        );
+
+        expect(vueAst.root.templateScripts.map(({ quote }) => quote)).deep.eq([
+          '"',
+          "'",
+          undefined,
+        ]);
+      });
+
+      it('should skip an unquoted attribute value', async () => {
+        const { vueAst } = await parseTemplate('<p :title=a></p>');
+
+        expect(vueAst.root.templateScripts).lengthOf(0);
+        expect(vueAst.root.templateExpressionSkipReasons).lengthOf(1);
+      });
+
+      it('should skip an expression with an html entity', async () => {
+        const { vueAst } = await parseTemplate(
+          '<p :title="a &amp;&amp; b">{{ c &lt; d }}</p>',
+        );
+
+        expect(vueAst.root.templateScripts).lengthOf(0);
+        expect(vueAst.root.templateExpressionSkipReasons).lengthOf(2);
+      });
+
+      it('should skip an expression that is not a single expression', async () => {
+        const { vueAst } = await parseTemplate('<p v-if="a; b"></p>');
+
+        expect(vueAst.root.templateScripts).lengthOf(0);
+        expect(vueAst.root.templateExpressionSkipReasons).lengthOf(1);
+      });
+
+      it('should sort the template scripts by their start', async () => {
+        const { vueAst } = await parseResource('AppEventHandlers.vue');
+
+        const starts = vueAst.root.templateScripts.map(
+          ({ range }) => range.start,
+        );
+        expect(starts).lengthOf.above(1);
+        expect(starts).deep.eq([...starts].sort((a, b) => a - b));
+      });
+
+      it('should collect the expressions of the AppMacros.vue test resource', async () => {
+        const { vueAst, text } = await parseResource('AppMacros.vue');
+
+        expect(slices(text, vueAst.root.templateScripts)).deep.eq([
+          'title',
+          'count + 1',
+        ]);
+      });
+
+      it('should collect the expressions of the AppScriptSetupGeneric.vue test resource', async () => {
+        const { vueAst, text } = await parseResource(
+          'AppScriptSetupGeneric.vue',
+        );
+
+        expect(slices(text, vueAst.root.templateScripts)).deep.eq([
+          'items',
+          'render(item)',
+        ]);
+        expect(
+          vueAst.root.templateScripts.map(({ ast }) => ast.format),
+        ).deep.eq([AstFormat.TS, AstFormat.TS]);
+      });
+    });
+
+    describe('groups B and C', () => {
+      (
+        [
+          [
+            'the aliases of v-for',
+            '<p v-for="(item, index) in 42"></p>',
+            ['42'],
+          ],
+          ['the parameters of v-slot', '<Comp v-slot="{ item }"></Comp>'],
+          ['v-model', '<input v-model="value">'],
+          [':key', '<p :key="id"></p>'],
+          [':ref', '<p :ref="el"></p>'],
+          ['a custom directive', '<p v-focus="enabled"></p>'],
+          ['a dynamic argument', '<p :[name]="value"></p>'],
+          ['v-memo', '<p v-memo="[a, b]"></p>'],
+          ['a same-name shorthand', '<p :id></p>'],
+          ['v-bind without an argument', '<p v-bind="attrs"></p>'],
+          ['v-on without an argument', '<p v-on="handlers"></p>'],
+          ['v-on with a dynamic argument', '<p @[event]="handler"></p>'],
+          ['v-else', '<p v-if="true"></p><p v-else></p>', ['true']],
+          ['the subtree of v-pre', '<div v-pre><p v-if="a">{{ b }}</p></div>'],
+          ['a directive in front of v-pre', '<p v-if="a" v-pre></p>'],
+        ] as ReadonlyArray<[string, string, string[]?]>
+      ).forEach(([description, template, collected = []]) => {
+        it(`should skip ${description}`, async () => {
+          const { vueAst, text } = await parseTemplate(template);
+
+          expect(slices(text, vueAst.root.templateScripts)).deep.eq(collected);
+          expect(vueAst.root.templateSkipReason).undefined;
+          expect(vueAst.root.templateExpressionSkipReasons).deep.eq([]);
+        });
+      });
+    });
+
+    describe('format', () => {
+      it('should parse the expressions as ts when a script is ts', async () => {
+        const { vueAst, text } = await parseResource('AppScriptSetupTs.vue');
+
+        expect(slices(text, vueAst.root.templateScripts)).deep.eq([
+          'count > 0',
+          '(count as number) + 1',
+        ]);
+        expect(
+          vueAst.root.templateScripts.map(({ ast }) => ast.format),
+        ).deep.eq([AstFormat.TS, AstFormat.TS]);
+      });
+
+      it('should parse the expressions as ts when a script is tsx', async () => {
+        const { vueAst } = await parseTemplate(
+          '<p>{{ a }}</p>',
+          '<script setup lang="tsx">const a = <div />;</script>',
+        );
+
+        expect(vueAst.root.templateScripts[0].ast.format).eq(AstFormat.TS);
+      });
+
+      it('should parse the expressions as js when no script is ts', async () => {
+        const { vueAst } = await parseTemplate('<p>{{ a }}</p>');
+
+        expect(vueAst.root.templateScripts[0].ast.format).eq(AstFormat.JS);
+      });
+    });
+
+    describe('positions', () => {
+      it('should offset an expression on the first line', async () => {
+        const { vueAst } = await parseTemplate('<p v-if="visible"></p>');
+
+        const [script] = vueAst.root.templateScripts;
+        expect(script.range).deep.eq({ start: 19, end: 26 });
+        expect(script.ast.offset).deep.eq({ line: 0, column: 19 });
+      });
+
+      it('should offset an expression below the first line', async () => {
+        const { vueAst } = await parseTemplate('\n  <p v-if="visible"></p>');
+
+        const [script] = vueAst.root.templateScripts;
+        expect(script.ast.offset).deep.eq({ line: 1, column: 11 });
+      });
+
+      it('should offset an object literal one character earlier, for the parentheses it was parsed with', async () => {
+        const { vueAst, text } = await parseTemplate('<p :class="{ a }"></p>');
+
+        const [script] = vueAst.root.templateScripts;
+        expect(script.ast.rawContent).eq('({ a })');
+        expect(script.ast.offset).deep.eq({
+          line: 0,
+          column: text.indexOf('{') - 1,
+        });
+        expect(expressionOf(script).loc!.start.column).eq(1);
+      });
+
+      it('should keep the exact ranges of an SFC with CRLF line endings', async () => {
+        const { vueAst, text } = await parseResource('AppCrlf.vue', (content) =>
+          content.replace(/\n/g, '\r\n'),
+        );
+
+        expect(text).contains('\r\n');
+        expect(slices(text, vueAst.root.templateScripts)).deep.eq([
+          'visible',
+          'message',
+        ]);
+        expect(vueAst.root.templateScripts[1].ast.offset).deep.eq({
+          line: 2,
+          column: 7,
+        });
+      });
+    });
+
+    describe('fallback', () => {
+      it('should skip the whole template of an SFC without `<script setup>`', async () => {
+        const { vueAst } = await parseResource('AppNoScriptSetup.vue');
+
+        expect(vueAst.root.templateScripts).lengthOf(0);
+        expect(vueAst.root.templateSkipReason).contains('<script setup>');
+        expect(vueAst.root.moduleScript).ok;
+      });
+
+      it('should skip the whole template when it is written in pug', async () => {
+        const { vueAst } = await parseResource('AppTemplatePug.vue');
+
+        expect(vueAst.root.templateScripts).lengthOf(0);
+        expect(vueAst.root.templateSkipReason).contains('pug');
+        expect(vueAst.root.setup).ok;
+      });
+
+      it('should skip the whole template when it is loaded with src', async () => {
+        const { vueAst } = await parseResource('AppTemplateSrc.vue');
+
+        expect(vueAst.root.templateScripts).lengthOf(0);
+        expect(vueAst.root.templateSkipReason).contains('separate file');
+        expect(vueAst.root.setup).ok;
+      });
+
+      it('should skip only the expression that cannot be parsed', async () => {
+        const { vueAst, text } = await parseResource('AppBrokenExpression.vue');
+
+        expect(vueAst.root.templateSkipReason).undefined;
+        expect(slices(text, vueAst.root.templateScripts)).deep.eq(['message']);
+        expect(vueAst.root.templateExpressionSkipReasons).lengthOf(1);
+        expect(vueAst.root.templateExpressionSkipReasons[0]).contains(
+          'could not be parsed',
+        );
+      });
+
+      it('should keep both plain scripts and skip the template of an SFC with two plain scripts', async () => {
+        const { vueAst } = await parseResource('AppTwoScripts.vue');
+
+        expect(vueAst.root.moduleScript!.ast.rawContent).contains(
+          'export default',
+        );
+        expect(vueAst.root.additionalScripts).lengthOf(1);
+        expect(vueAst.root.additionalScripts[0].ast.rawContent).contains(
+          'window.message',
+        );
+        expect(vueAst.root.templateScripts).lengthOf(0);
+        expect(vueAst.root.templateSkipReason).contains('parse errors');
+      });
+
+      it('should not report a skip reason for an SFC without a template', async () => {
+        const vueAst = await parse(
+          '<script setup>const a = 1;</script>',
+          'App.vue',
+          context,
+        );
+
+        expect(vueAst.root.templateScripts).lengthOf(0);
+        expect(vueAst.root.templateSkipReason).undefined;
+      });
+    });
+
+    describe('vue compiler', () => {
+      it('should resolve the compiler from the current working directory', async () => {
+        const vueVersion = (
+          createRequire(import.meta.url)('vue/package.json') as {
+            version: string;
+          }
+        ).version;
+
+        const lookup = await loadVueCompiler();
+
+        expect(lookup.skipReason).undefined;
+        expect(lookup.compiler!.version).eq(vueVersion);
+      });
+
+      async function createProject(compilerSource: string): Promise<string> {
+        const projectRoot = await fsPromises.mkdtemp(
+          path.join(os.tmpdir(), 'vue-parser-'),
+        );
+        const vueDir = path.join(projectRoot, 'node_modules', 'vue');
+        await fsPromises.mkdir(vueDir, { recursive: true });
+        await fsPromises.writeFile(
+          path.join(projectRoot, 'package.json'),
+          '{}',
+        );
+        await fsPromises.writeFile(
+          path.join(vueDir, 'package.json'),
+          '{ "name": "vue", "version": "3.99.0" }',
+        );
+        await fsPromises.writeFile(
+          path.join(vueDir, 'compiler-sfc.js'),
+          compilerSource,
+        );
+        return projectRoot;
+      }
+
+      it('should prefer the compiler of the project over the one of the instrumenter', async () => {
+        const projectRoot = await createProject(
+          `module.exports = { version: '3.99.0', parse: () => ({ descriptor: { template: null, scriptSetup: null }, errors: [] }) };`,
+        );
+        process.chdir(projectRoot);
+
+        const { vueAst } = await parseTemplate('<p>{{ a }}</p>');
+
+        expect(vueAst.root.templateScripts).lengthOf(0);
+        expect(vueAst.root.templateSkipReason).eq(
+          'vue/compiler-sfc 3.99.0 produces an unsupported template AST',
+        );
+        expect(vueAst.root.setup).ok;
+      });
+
+      it('should skip the template when the compiler cannot be loaded', async () => {
+        const projectRoot = await createProject(`throw new Error('broken');`);
+
+        const lookup = await loadVueCompiler(projectRoot);
+
+        expect(lookup.compiler).undefined;
+        expect(lookup.skipReason).contains('could not be loaded');
+      });
+
+      it('should load the compiler once per project root', async () => {
+        const first = loadVueCompiler();
+        const second = loadVueCompiler();
+
+        expect(first).eq(second);
+        expect(await first).eq(await second);
+      });
+
+      it('should accept the compiler of this project', async () => {
+        const { compiler } = await loadVueCompiler();
+
+        expect(checkVueCompiler(compiler!)).undefined;
+      });
+
+      it('should reject a compiler older than 3.4.0', () => {
+        const parseStub = sinon.stub();
+        const compiler: VueCompilerSfc = {
+          version: '3.3.13',
+          parse: parseStub,
+        };
+
+        expect(checkVueCompiler(compiler)).contains('3.3.13 is not supported');
+        expect(parseStub).not.called;
+      });
+
+      it('should reject a compiler that produces a template AST without a root node', () => {
+        const compiler: VueCompilerSfc = {
+          version: '3.4.0',
+          parse: () => ({
+            descriptor: {
+              template: { ast: { type: 1, tag: 'template', children: [] } },
+              scriptSetup: null,
+            },
+            errors: [],
+          }),
+        };
+
+        expect(checkVueCompiler(compiler)).contains('unsupported template AST');
+      });
+
+      it('should reject a compiler that does not parse the source of v-for', () => {
+        const compiler: VueCompilerSfc = {
+          version: '3.4.0',
+          parse: () => ({
+            descriptor: {
+              template: {
+                ast: {
+                  type: 0,
+                  children: [{ type: 1, props: [{ type: 7, name: 'for' }] }],
+                },
+              },
+              scriptSetup: null,
+            },
+            errors: [],
+          }),
+        };
+
+        expect(checkVueCompiler(compiler)).contains('unsupported template AST');
+      });
+    });
+
+    describe('v-on', () => {
+      async function parseHandler(
+        handler: string,
+        tag = 'button',
+      ): Promise<TemplateScript> {
+        const { vueAst } = await parseTemplate(
+          `<${tag} @click="${handler}"></${tag}>`,
+          '<script setup lang="ts">const a = 1;</script>',
+        );
+        expect(vueAst.root.templateScripts).lengthOf(1);
+        return vueAst.root.templateScripts[0];
+      }
+
+      function expectLocationOf(node: types.Node, original: types.Node) {
+        expect(node.loc).eq(original.loc);
+        expect(node.start).eq(original.start);
+        expect(node.end).eq(original.end);
+      }
+
+      (
+        [
+          ['an identifier', 'submit', 'Identifier'],
+          ['a member expression', 'obj.submit', 'MemberExpression'],
+          ['a ts expression', 'obj.submit as any', 'TSAsExpression'],
+        ] as const
+      ).forEach(([description, handler, originalType]) => {
+        it(`should wrap ${description} handler in an arrow function`, async () => {
+          const script = await parseHandler(handler);
+
+          const arrow = expressionOf(script) as types.ArrowFunctionExpression;
+          expect(arrow.type).eq('ArrowFunctionExpression');
+          const call = arrow.body as types.CallExpression;
+          expect(call.type).eq('CallExpression');
+          const original = call.callee as types.Expression;
+          expect(original.type).eq(originalType);
+          expect(script.range.end - script.range.start).eq(handler.length);
+
+          const rest = arrow.params[0] as types.RestElement;
+          const spread = call.arguments[0] as types.SpreadElement;
+          [arrow, rest, rest.argument, call, spread, spread.argument].forEach(
+            (node) => expectLocationOf(node, original),
+          );
+          expect(original.start).eq(0);
+          expect(original.end).eq(handler.length);
+          expect(script.protectedNodes!.has(arrow)).true;
+          expect(script.protectedNodes!.has(call)).true;
+          expect(script.protectedNodes!.has(original)).false;
+        });
+      });
+
+      it('should wrap an optional member handler in an optional call', async () => {
+        const script = await parseHandler('obj?.handler');
+
+        const arrow = expressionOf(script) as types.ArrowFunctionExpression;
+        const call = arrow.body as types.OptionalCallExpression;
+        expect(call.type).eq('OptionalCallExpression');
+        expect(call.optional).false;
+        expect(call.callee.type).eq('OptionalMemberExpression');
+        expect(script.protectedNodes!.has(call.callee)).false;
+      });
+
+      it('should protect the root of a function handler without wrapping it', async () => {
+        const script = await parseHandler('() => count++');
+
+        const root = expressionOf(script);
+        expect(root.type).eq('ArrowFunctionExpression');
+        expect(script.protectedNodes!.has(root)).true;
+      });
+
+      it('should protect the function inside a ts expression', async () => {
+        const script = await parseHandler('(function () {}) as any');
+
+        const root = expressionOf(script) as types.TSAsExpression;
+        expect(script.protectedNodes!.has(root)).true;
+        expect(script.protectedNodes!.has(root.expression)).true;
+      });
+
+      it('should leave an inline statement alone', async () => {
+        const script = await parseHandler('count++');
+
+        expect(expressionOf(script).type).eq('UpdateExpression');
+        expect(script.protectedNodes).undefined;
+      });
+
+      it('should not wrap an `undefined` identifier', async () => {
+        const script = await parseHandler('undefined');
+
+        expect(expressionOf(script).type).eq('Identifier');
+        expect(script.protectedNodes).undefined;
+      });
+
+      it('should skip a handler with more than one statement', async () => {
+        const { vueAst } = await parseTemplate(
+          '<button @click="first(); second()"></button>',
+        );
+
+        expect(vueAst.root.templateScripts).lengthOf(0);
+        expect(vueAst.root.templateExpressionSkipReasons).lengthOf(1);
+      });
+
+      it('should classify every handler of the AppEventHandlers.vue test resource', async () => {
+        const { vueAst, text } = await parseResource('AppEventHandlers.vue');
+
+        expect(slices(text, vueAst.root.templateScripts)).deep.eq([
+          'submit',
+          'obj.submit',
+          'obj?.handler',
+          '(obj as any).handler',
+          '() => count++',
+          'count++',
+          'submit',
+        ]);
+        expect(
+          vueAst.root.templateScripts.map(
+            (script) => expressionOf(script).type,
+          ),
+        ).deep.eq([
+          'ArrowFunctionExpression',
+          'ArrowFunctionExpression',
+          'ArrowFunctionExpression',
+          'ArrowFunctionExpression',
+          'ArrowFunctionExpression',
+          'UpdateExpression',
+          'ArrowFunctionExpression',
+        ]);
+        expect(vueAst.root.templateExpressionSkipReasons).lengthOf(1);
+      });
+
+      it('should not wrap a member handler on any spelling of Transition and TransitionGroup', async () => {
+        const { vueAst, text } = await parseResource(
+          'AppTransitionHandlers.vue',
+        );
+
+        expect(slices(text, vueAst.root.templateScripts)).deep.eq([
+          '() => obj.after()',
+        ]);
+        expect(vueAst.root.templateExpressionSkipReasons).lengthOf(4);
+        vueAst.root.templateExpressionSkipReasons.forEach((reason) =>
+          expect(reason).contains('transition'),
+        );
+      });
+    });
   });
 
   function realParserContext(): ParserContext {

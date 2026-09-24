@@ -1159,6 +1159,9 @@ export default {
       },
     },
     "setup": undefined,
+    "templateExpressionSkipReasons": Array [],
+    "templateScripts": Array [],
+    "templateSkipReason": "the SFC has no <script setup>",
   },
 }
 `;

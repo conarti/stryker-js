@@ -99,6 +99,18 @@ export interface VueRootNode {
    * That same block is part of `additionalScripts` as well.
    */
   setup?: VueSetupScript;
+  /**
+   * The expressions of the `<template>`, sorted by `range.start`.
+   */
+  templateScripts: TemplateScript[];
+  /**
+   * Why the whole `<template>` was left alone, when it was.
+   */
+  templateSkipReason?: string;
+  /**
+   * Why single template expressions were left alone, one entry per expression.
+   */
+  templateExpressionSkipReasons: string[];
 }
 
 /**
@@ -118,6 +130,16 @@ export interface TemplateScript {
   ast: ScriptAst;
   range: Range;
   isExpression: boolean;
+  /**
+   * The quote that delimits the attribute value of a template directive.
+   * Absent for interpolations and scripts.
+   */
+  quote?: '"' | "'";
+  /**
+   * Nodes that should never be mutated, for example the root of a `v-on` handler
+   * or the nodes that were synthesized around it.
+   */
+  protectedNodes?: WeakSet<babelTypes.Node>;
 }
 
 export interface Range {
