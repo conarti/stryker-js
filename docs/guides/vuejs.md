@@ -31,7 +31,7 @@ Stryker also mutates the expressions inside the `<template>` block of a single f
 
 - Vue 3.4 or newer. Stryker loads `vue/compiler-sfc` from the root of your project (the directory you run Stryker from), so the version your project compiles with is the one that is used.
 - The component uses `<script setup>`. The template of a component that only has a plain `<script>` block (Options API or `defineComponent`) is not mutated.
-- The template is plain html. A template with a `lang` other than `html` (for example `pug`) or with a `src` attribute is not mutated.
+- The template is plain HTML. A template with a `lang` other than `html` (for example `pug`) or with a `src` attribute is not mutated.
 
 ### What is mutated
 
@@ -57,6 +57,7 @@ These positions are never mutated:
 - the aliases of `v-for`, the `item` in `v-for="item in items"`
 - everything inside an element with `v-pre`
 - an expression that contains an html entity, such as `&amp;`, or an attribute value without quotes
+- an expression Stryker cannot parse
 - an inline `v-on` handler with more than one statement, such as `@click="count++; save()"`
 - a handler of a `<Transition>` or `<TransitionGroup>` that refers to a function, such as `@after-enter="onAfterEnter"` (see below)
 
@@ -68,7 +69,7 @@ When a template cannot be mutated as a whole, Stryker logs a warning with the re
 
 When some expressions of a template are skipped because of their content (an html entity, a missing quote, an expression Stryker cannot parse, a handler with more than one statement or a function handler of a transition), Stryker logs one warning per file with the number of skipped expressions. Run with `--logLevel debug` to see which expressions they are and why.
 
-The positions in the skipped list above are left out silently, they are not errors.
+The positions in the skipped list above are left out silently. They are not errors.
 
 ### Event handlers
 
@@ -76,7 +77,7 @@ Vue decides how to call a `v-on` handler by the text of its expression. `@click=
 
 - For a function expression, only the body of the function is mutated.
 - For an inline statement, the whole expression can be mutated, because Vue treats the mutated expression as an inline statement as well.
-- For a handler that refers to a function (`submit`, `form.submit`, `form?.submit`, `form!.submit`), Stryker places the mutants inside a wrapper, `(...args) => form.submit(...args)`, and never around the reference itself. The wrapper only ends up in the instrumented code when a mutant is placed inside it. None of the regular mutators changes such a reference, so with the regular mutators these handlers produce no mutants at all and no wrapper.
+- For a handler that refers to a function (`submit`, `form.submit`, `form?.submit`, `form!.submit`), Stryker places the mutants inside a wrapper, `(...stryArgs_9fa48) => form.submit(...stryArgs_9fa48)`, and never around the reference itself. The wrapper only ends up in the instrumented code when a mutant is placed inside it. None of the regular mutators changes such a reference, so with the regular mutators these handlers produce no mutants at all and no wrapper.
 
 The wrapper behaves like the handler Vue generates itself, with three differences:
 
