@@ -18,9 +18,11 @@ import { PositionConverter } from '../util/index.js';
 import { collectScriptBlocks } from './html-parser.js';
 import { ParserContext } from './parser-context.js';
 
+/** @internal */
 export const MIN_VUE_VERSION = '>=3.4.0';
 
 /**
+ * @internal
  * The part of `vue/compiler-sfc` this parser uses. The types are declared here,
  * because `vue` is not a dependency of this package.
  */
@@ -161,12 +163,10 @@ export async function parse(
   )
     ? AstFormat.TS
     : AstFormat.JS;
-  const template = await collectTemplateScripts(
-    text,
-    fileName,
-    context,
-    expressionFormat,
-  );
+  /* Template mutation is limited to `<script setup>`, so the compiler isn't even loaded without one */
+  const template = setup
+    ? await collectTemplateScripts(text, fileName, context, expressionFormat)
+    : { templateScripts: [], templateExpressionSkipReasons: [] };
 
   const root: VueRootNode = {
     moduleScript,
@@ -187,6 +187,7 @@ export async function parse(
  * Resolves `vue/compiler-sfc` from the root of the project under test rather than from this package,
  * so the version the project compiles with is the one that is used.
  * The current working directory is the root of that project.
+ * @internal
  */
 export function loadVueCompiler(
   projectRoot = process.cwd(),
@@ -228,6 +229,7 @@ async function importVueCompiler(projectRoot: string): Promise<CompilerLookup> {
 /**
  * Checks that the compiler is recent enough, both by its version and by the shape of the template AST it produces.
  * @returns the reason the compiler cannot be used, or `undefined` when it can
+ * @internal
  */
 export function checkVueCompiler(compiler: VueCompilerSfc): string | undefined {
   if (!satisfies(compiler.version, MIN_VUE_VERSION)) {
@@ -302,9 +304,6 @@ async function collectTemplateScripts(
   const { template } = descriptor;
   if (!template) {
     return { templateScripts, templateExpressionSkipReasons };
-  }
-  if (!descriptor.scriptSetup) {
-    return skipTemplate('the SFC has no <script setup>');
   }
   if (template.lang && template.lang !== 'html') {
     return skipTemplate(

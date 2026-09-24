@@ -557,11 +557,11 @@ describe('vue-parser', () => {
     });
 
     describe('fallback', () => {
-      it('should skip the whole template of an SFC without `<script setup>`', async () => {
+      it('should skip the whole template of an SFC without `<script setup>` without a reason', async () => {
         const { vueAst } = await parseResource('AppNoScriptSetup.vue');
 
         expect(vueAst.root.templateScripts).lengthOf(0);
-        expect(vueAst.root.templateSkipReason).contains('<script setup>');
+        expect(vueAst.root.templateSkipReason).undefined;
         expect(vueAst.root.moduleScript).ok;
       });
 
@@ -603,7 +603,7 @@ describe('vue-parser', () => {
           'window.message',
         );
         expect(vueAst.root.templateScripts).lengthOf(0);
-        expect(vueAst.root.templateSkipReason).contains('parse errors');
+        expect(vueAst.root.templateSkipReason).undefined;
       });
 
       it('should not report a skip reason for an SFC without a template', async () => {
