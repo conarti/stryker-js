@@ -40,6 +40,9 @@ export const print: Printer<VueAst> = ({ root, rawContent }, context) => {
 /**
  * Prints a template expression on a single line, with new string literals quoted differently than the attribute value.
  * @returns the code, or `undefined` when it cannot be put back in the template safely
+ * When the original expression is printed instead, the mutants that were placed in it are not
+ * switched on anywhere, so they survive without a test ever running them. The printer has no way
+ * to report them back, as the mutants are already collected by then.
  */
 function printExpression({ ast, quote }: TemplateScript): string | undefined {
   const { code } = generate(ast.root, {

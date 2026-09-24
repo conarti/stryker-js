@@ -184,6 +184,7 @@ export async function parse(
 /**
  * Resolves `vue/compiler-sfc` from the root of the project under test rather than from this package,
  * so the version the project compiles with is the one that is used.
+ * The current working directory is the root of that project.
  */
 export function loadVueCompiler(
   projectRoot = process.cwd(),
@@ -335,10 +336,8 @@ async function collectTemplateScripts(
     isEventHandler,
     isOnTransition,
   }: TemplateExpression): Promise<TemplateScript | string> {
-    const { start, end } = {
-      start: node.loc.start.offset,
-      end: node.loc.end.offset,
-    };
+    const start = node.loc.start.offset;
+    const end = node.loc.end.offset;
     const where = `${fileName}:${start}`;
     const slice = text.slice(start, end);
     if (slice !== node.content || HTML_ENTITY.test(node.content)) {

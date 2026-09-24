@@ -716,6 +716,21 @@ export default { data: () => ({ label: 'hello' }) };
       );
     });
 
+    it('should log why each expression was skipped when debug is enabled', async () => {
+      testInjector.logger.isDebugEnabled.returns(true);
+      const vue = await parseSfc(
+        '<template><p :title=a :id=b>{{ c }}</p></template>\n<script setup>\nconst x = 1;\n</script>\n',
+      );
+
+      transformVue(vue, mutantCollector, context);
+
+      sinon.assert.calledOnceWithExactly(
+        testInjector.logger.debug,
+        vue.root.templateExpressionSkipReasons.join('\n'),
+      );
+      expect(vue.root.templateExpressionSkipReasons).lengthOf(2);
+    });
+
     it('should not warn when nothing is skipped', async () => {
       const vue = await parseSfc(
         '<template><p>{{ c }}</p></template>\n<script setup>\nconst x = 1;\n</script>\n',

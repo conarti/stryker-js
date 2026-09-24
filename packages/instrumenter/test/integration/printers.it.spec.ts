@@ -1,11 +1,17 @@
 import { promises as fsPromises } from 'fs';
 
 import { normalizeWhitespaces } from '@stryker-mutator/util';
+import { testInjector } from '@stryker-mutator/test-helpers';
 import { expect } from 'chai';
 
 import { createParser } from '../../src/parsers/index.js';
 import { print } from '../../src/printers/index.js';
-import { createParserOptions } from '../helpers/factories.js';
+import { transform } from '../../src/transformers/index.js';
+import { MutantCollector } from '../../src/transformers/mutant-collector.js';
+import {
+  createParserOptions,
+  createTransformerOptions,
+} from '../helpers/factories.js';
 import { resolveTestResource } from '../helpers/resolve-test-resource.js';
 
 const resolvePrinterTestResource = resolveTestResource.bind(null, 'printer');
@@ -51,5 +57,28 @@ describe('parse and print integration', () => {
         normalizeWhitespaces(expectedOutput),
       );
     }
+  });
+  describe('vue', () => {
+    it('should only change the template expressions that hold a mutant', async () => {
+      const fileName = resolveTestResource(
+        'instrumenter',
+        'vue-template-expressions.vue',
+      );
+      const code = await fsPromises.readFile(fileName, 'utf8');
+      const parsed = await createParser(createParserOptions())(code, fileName);
+      transform(parsed, new MutantCollector(), {
+        options: createTransformerOptions(),
+        mutateDescription: true,
+        logger: testInjector.logger,
+        isExpressionContext: false,
+      });
+
+      const output = print(parsed);
+
+      const negativeSection = (text: string) =>
+        text.slice(text.indexOf('  <section>\n'), text.indexOf('</template>'));
+      expect(negativeSection(output)).eq(negativeSection(code));
+      expect(output).include('<button type="button" @click="actions.reset">');
+    });
   });
 });

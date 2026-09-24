@@ -29,7 +29,18 @@ interface MutantsPlacement<TNode extends types.Node> {
 
 type PlacementMap = Map<types.Node, MutantsPlacement<types.Node>>;
 
-export const transformBabel: AstTransformer<ScriptFormat> = (
+/**
+ * An `AstTransformer` that also takes the mutators and mutant placers to use.
+ */
+export type BabelTransformer = (
+  ...args: [
+    ...Parameters<AstTransformer<ScriptFormat>>,
+    mutators?: NodeMutator[],
+    mutantPlacers?: readonly MutantPlacer[],
+  ]
+) => void;
+
+export const transformBabel: BabelTransformer = (
   { root, originFileName, rawContent, offset },
   mutantCollector,
   { options, mutateDescription, logger, isExpressionContext },

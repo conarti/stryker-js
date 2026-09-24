@@ -16273,3 +16273,41 @@ Object {
   },
 }
 `;
+
+exports[`transformers integration should transform the expressions of a vue template 1`] = `
+Array [
+  "ObjectLiteral: {}",
+  "ConditionalExpression: true",
+  "ConditionalExpression: false",
+  "EqualityOperator: count >= 0",
+  "EqualityOperator: count <= 0",
+  "ObjectLiteral: {}",
+  "StringLiteral: \\"\\"",
+  "MethodExpression: title.toLowerCase()",
+  "ConditionalExpression: true",
+  "ConditionalExpression: false",
+  "EqualityOperator: count >= 10",
+  "EqualityOperator: count <= 10",
+  "ConditionalExpression: true",
+  "ConditionalExpression: false",
+  "LogicalOperator: count === 0 || !loading",
+  "ConditionalExpression: true",
+  "EqualityOperator: count !== 0",
+  "BooleanLiteral: loading",
+  "ConditionalExpression: true",
+  "ConditionalExpression: false",
+  "EqualityOperator: count > 1",
+  "EqualityOperator: count < 1",
+  "StringLiteral: \\"\\"",
+  "UpdateOperator: count--",
+  "ArithmeticOperator: count + 1",
+  "MethodExpression: items",
+  "ArrowFunction: () => undefined",
+  "ArithmeticOperator: index - 1",
+  "ConditionalExpression: true",
+  "ConditionalExpression: false",
+  "LogicalOperator: html && '<br>'",
+  "StringLiteral: \\"\\"",
+  "StringLiteral: \\"\\"",
+]
+`;

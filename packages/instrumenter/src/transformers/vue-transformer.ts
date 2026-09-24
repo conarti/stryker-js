@@ -8,7 +8,6 @@ import {
   AstFormat,
   Range,
   ScriptAst,
-  ScriptFormat,
   TemplateScript,
   VueAst,
   VueSetupScript,
@@ -151,6 +150,7 @@ export const transformVue: AstTransformer<AstFormat.Vue> = (
     .sort((a, b) => a.range.start - b.range.start);
   const { setup } = root;
 
+  /* Template mutation is limited to `<script setup>`, so there is no skip reason to report otherwise */
   if (!setup) {
     /* Without a `<script setup>` block every script instruments itself, header included */
     scripts.forEach((script) => {
@@ -248,13 +248,6 @@ export const transformVue: AstTransformer<AstFormat.Vue> = (
 };
 
 /**
- * `transformBabel` takes the mutators as a trailing parameter, which its `AstTransformer` type leaves out.
- */
-const transformBabelWithMutators = transformBabel as (
-  ...args: [...Parameters<AstTransformer<ScriptFormat>>, NodeMutator[]]
-) => void;
-
-/**
  * Collects the range of every argument of every compiler macro call.
  */
 function collectMacroArgumentRanges(root: types.File): Range[] {
@@ -346,7 +339,7 @@ function transformTemplateScripts(
   vue.root.templateScripts = vue.root.templateScripts.filter((script) => {
     const mutantsBefore = mutantCollector.mutants.length;
     if (script.protectedNodes) {
-      transformBabelWithMutators(
+      transformBabel(
         script.ast,
         mutantCollector,
         expressionContext,

@@ -1,8 +1,14 @@
 import { promises as fsPromises } from 'fs';
 
 import { testInjector } from '@stryker-mutator/test-helpers';
+import { Mutant } from '@stryker-mutator/api/core';
 import { expect } from 'chai';
-import { compileScript, parse, SFCParseResult } from 'vue/compiler-sfc';
+import {
+  compileScript,
+  compileTemplate,
+  parse,
+  SFCParseResult,
+} from 'vue/compiler-sfc';
 
 import { createInstrumenter, Instrumenter } from '../../src/index.js';
 import { createInstrumenterOptions } from '../helpers/factories.js';
@@ -23,7 +29,49 @@ const scriptSetupFixtures = Object.freeze([
   'vue-script-setup-bare-define-emits.vue',
   'vue-script-setup-bare-with-defaults.vue',
   'vue-script-setup-first.vue',
+  'vue-template-expressions.vue',
+  'vue-template-expressions-generic.vue',
+  'vue-issue-define-model.vue',
+  'vue-issue-define-options.vue',
+  'vue-issue-define-props.vue',
 ]);
+
+type MutantPosition = [
+  mutatorName: string,
+  startLine: number,
+  startColumn: number,
+  endLine: number,
+  endColumn: number,
+];
+
+/**
+ * The placed script mutants of the three components of issue #6178, as they were before the template was mutated.
+ */
+const scriptMutantsBeforeTemplateMutation: Readonly<
+  Record<string, MutantPosition[]>
+> = Object.freeze({
+  'vue-issue-define-model.vue': [
+    ['ObjectLiteral', 11, 42, 11, 60],
+    ['BooleanLiteral', 11, 53, 11, 58],
+    ['StringLiteral', 13, 14, 13, 32],
+    ['StringLiteral', 14, 13, 14, 48],
+  ],
+  'vue-issue-define-options.vue': [
+    ['ObjectLiteral', 9, 14, 9, 37],
+    ['BooleanLiteral', 9, 30, 9, 35],
+    ['StringLiteral', 11, 14, 11, 30],
+    ['BooleanLiteral', 12, 17, 12, 21],
+    ['StringLiteral', 13, 14, 13, 24],
+  ],
+  'vue-issue-define-props.vue': [
+    ['ObjectLiteral', 8, 26, 12, 1],
+    ['ObjectLiteral', 9, 9, 9, 51],
+    ['StringLiteral', 9, 34, 9, 49],
+    ['ObjectLiteral', 10, 9, 10, 37],
+    ['ObjectLiteral', 11, 12, 11, 45],
+    ['BooleanLiteral', 11, 38, 11, 43],
+  ],
+});
 
 describe('vue script setup integration', () => {
   let sut: Instrumenter;
@@ -52,6 +100,51 @@ describe('vue script setup integration', () => {
           expect(parsed.errors).lengthOf(0);
         });
       }
+
+      it('should have a template that is compiled by the vue compiler without errors', () => {
+        const { descriptor } = parsed;
+        const script = compileScript(descriptor, {
+          id: fixture,
+          inlineTemplate: false,
+        });
+        if (!descriptor.template) {
+          return;
+        }
+
+        const { errors } = compileTemplate({
+          id: fixture,
+          filename: fixture,
+          source: descriptor.template.content,
+          compilerOptions: { bindingMetadata: script.bindings },
+        });
+
+        expect(errors).lengthOf(0);
+      });
+    });
+  }
+
+  for (const [fixture, expectedMutants] of Object.entries(
+    scriptMutantsBeforeTemplateMutation,
+  )) {
+    it(`should place the same script mutants in ${fixture} as before the template was mutated`, async () => {
+      const content = await fsPromises.readFile(
+        resolveTestResource('instrumenter', fixture),
+        'utf-8',
+      );
+      const { mutants } = await instrumentFile(fixture);
+      const templateEndLine = content
+        .slice(0, content.indexOf('</template>'))
+        .split('\n').length;
+
+      /* Ignored mutants are left out, only placed mutants are compared with the baseline. */
+      const scriptMutants = mutants
+        .filter(
+          ({ location, status }) =>
+            status !== 'Ignored' && location.start.line >= templateEndLine,
+        )
+        .map(positionOf);
+
+      expect(scriptMutants).deep.eq(expectedMutants);
     });
   }
 
@@ -128,8 +221,13 @@ describe('vue script setup integration', () => {
   });
 
   async function instrument(fileName: string): Promise<string> {
+    const { files } = await instrumentFile(fileName);
+    return files[0].content;
+  }
+
+  async function instrumentFile(fileName: string) {
     const name = resolveTestResource('instrumenter', fileName);
-    const result = await sut.instrument(
+    return sut.instrument(
       [
         {
           name,
@@ -139,7 +237,6 @@ describe('vue script setup integration', () => {
       ],
       createInstrumenterOptions(),
     );
-    return result.files[0].content;
   }
 });
 
@@ -150,4 +247,14 @@ function declaredPropNames(compiledScript: string): string[] {
   return [...compiledScript.matchAll(/^\s*"([\w$]+)":/gm)].map(
     ([, name]) => name,
   );
+}
+
+function positionOf({ mutatorName, location }: Mutant): MutantPosition {
+  return [
+    mutatorName,
+    location.start.line,
+    location.start.column,
+    location.end.line,
+    location.end.column,
+  ];
 }

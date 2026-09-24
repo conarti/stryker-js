@@ -85,6 +85,21 @@ describe('instrumenter integration', () => {
   it('should keep a header per script block of a vue SFC when no compiler macro argument is mutated', async () => {
     await arrangeAndActAssert('vue-script-setup-header-per-block.vue');
   });
+  it('should be able to instrument the expressions of a vue template', async () => {
+    await arrangeAndActAssert('vue-template-expressions.vue');
+  });
+  it('should be able to instrument the template of a generic vue script setup component', async () => {
+    await arrangeAndActAssert('vue-template-expressions-generic.vue');
+  });
+  it('should be able to instrument a vue script setup component with `defineModel`', async () => {
+    await arrangeAndActAssert('vue-issue-define-model.vue');
+  });
+  it('should be able to instrument a vue script setup component with `defineOptions`', async () => {
+    await arrangeAndActAssert('vue-issue-define-options.vue');
+  });
+  it('should be able to instrument a vue script setup component with `defineProps`', async () => {
+    await arrangeAndActAssert('vue-issue-define-props.vue');
+  });
   it('should be able to instrument super calls', async () => {
     await arrangeAndActAssert('super-call.ts');
   });

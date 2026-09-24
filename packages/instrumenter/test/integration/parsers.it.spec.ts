@@ -38,6 +38,20 @@ describe('parsers integration', () => {
     expect(actual).to.matchSnapshot();
   });
 
+  it('should collect the expressions of a vue template with a `<script setup>` block', async () => {
+    const actual = await actAssertVue(
+      '../instrumenter/vue-template-expressions.vue',
+    );
+    expect(actual.root.setup).ok;
+    expect(actual.root.templateSkipReason).undefined;
+    expect(actual.root.templateExpressionSkipReasons).lengthOf(0);
+    expect(
+      actual.root.templateScripts.map(({ range }) =>
+        actual.rawContent.slice(range.start, range.end),
+      ),
+    ).to.matchSnapshot();
+  });
+
   it('should allow to parse a an angular file', async () => {
     const actual = await actAssertTS('app.component.ts');
     expect(actual).to.matchSnapshot();

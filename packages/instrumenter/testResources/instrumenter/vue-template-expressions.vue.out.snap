@@ -1,0 +1,113 @@
+// Jest Snapshot v1, https://goo.gl/fbAQLP
+
+exports[`instrumenter integration should be able to instrument the expressions of a vue template 1`] = `
+"<script lang=\\"ts\\">
+
+function stryNS_9fa48() {
+  var g = typeof globalThis === 'object' && globalThis && globalThis.Math === Math && globalThis || new Function(\\"return this\\")();
+  var ns = g.__stryker__ || (g.__stryker__ = {});
+  if (ns.activeMutant === undefined && g.process && g.process.env && g.process.env.__STRYKER_ACTIVE_MUTANT__) {
+    ns.activeMutant = g.process.env.__STRYKER_ACTIVE_MUTANT__;
+  }
+  function retrieveNS() {
+    return ns;
+  }
+  stryNS_9fa48 = retrieveNS;
+  return retrieveNS();
+}
+stryNS_9fa48();
+function stryCov_9fa48() {
+  var ns = stryNS_9fa48();
+  var cov = ns.mutantCoverage || (ns.mutantCoverage = {
+    static: {},
+    perTest: {}
+  });
+  function cover() {
+    var c = cov.static;
+    if (ns.currentTestId) {
+      c = cov.perTest[ns.currentTestId] = cov.perTest[ns.currentTestId] || {};
+    }
+    var a = arguments;
+    for (var i = 0; i < a.length; i++) {
+      c[a[i]] = (c[a[i]] || 0) + 1;
+    }
+  }
+  stryCov_9fa48 = cover;
+  cover.apply(null, arguments);
+}
+function stryMutAct_9fa48(id) {
+  var ns = stryNS_9fa48();
+  function isActive(id) {
+    if (ns.activeMutant === id) {
+      if (ns.hitCount !== void 0 && ++ns.hitCount > ns.hitLimit) {
+        throw new Error('Stryker: Hit count limit reached (' + ns.hitCount + ')');
+      }
+      return true;
+    }
+    return false;
+  }
+  stryMutAct_9fa48 = isActive;
+  return isActive(id);
+}
+
+</script>
+<template>
+  <section :class=\\"stryMutAct_9fa48('13') ? {} : (stryCov_9fa48('13'), { active: stryMutAct_9fa48('17') ? count <= 0 : stryMutAct_9fa48('16') ? count >= 0 : stryMutAct_9fa48('15') ? false : stryMutAct_9fa48('14') ? true : (stryCov_9fa48('14', '15', '16', '17'), count > 0) })\\" :style=\\"stryMutAct_9fa48('18') ? {} : (stryCov_9fa48('18'), { width: size + (stryMutAct_9fa48('19') ? '' : (stryCov_9fa48('19'), 'px')) })\\">
+    <h1>{{ stryMutAct_9fa48(\\"21\\") ? title.toLowerCase() : (stryCov_9fa48(\\"21\\"), title.toUpperCase()) }}</h1>
+    <p v-if=\\"stryMutAct_9fa48('25') ? count <= 10 : stryMutAct_9fa48('24') ? count >= 10 : stryMutAct_9fa48('23') ? false : stryMutAct_9fa48('22') ? true : (stryCov_9fa48('22', '23', '24', '25'), count > 10)\\">many</p>
+    <p v-else-if=\\"stryMutAct_9fa48('28') ? count === 0 || !loading : stryMutAct_9fa48('27') ? false : stryMutAct_9fa48('26') ? true : (stryCov_9fa48('26', '27', '28'), (stryMutAct_9fa48('30') ? count !== 0 : stryMutAct_9fa48('29') ? true : (stryCov_9fa48('29', '30'), count === 0)) && (stryMutAct_9fa48('31') ? loading : (stryCov_9fa48('31'), !loading)))\\">none</p>
+    <p v-show=\\"stryMutAct_9fa48('35') ? count < 1 : stryMutAct_9fa48('34') ? count > 1 : stryMutAct_9fa48('33') ? false : stryMutAct_9fa48('32') ? true : (stryCov_9fa48('32', '33', '34', '35'), count >= 1)\\" v-bind:title=\\"(stryMutAct_9fa48('36') ? '' : (stryCov_9fa48('36'), 'Total ')) + count\\">some</p>
+    <button type=\\"button\\" @click=\\"stryMutAct_9fa48('37') ? count-- : (stryCov_9fa48('37'), count++)\\" v-on:dblclick=\\"reset(stryMutAct_9fa48('39') ? count + 1 : (stryCov_9fa48('39'), count - 1))\\">
+      +
+    </button>
+    <button type=\\"button\\" @click=\\"actions.reset\\">reset</button>
+    <ul>
+      <li
+        v-for=\\"(item, index) in stryMutAct_9fa48('41') ? items : (stryCov_9fa48('41'), items.filter(stryMutAct_9fa48('42') ? () => undefined : (stryCov_9fa48('42'), i => i.visible)))\\"
+        :key=\\"item.id\\"
+      >
+        {{ stryMutAct_9fa48(\\"43\\") ? index - 1 : (stryCov_9fa48(\\"43\\"), index + 1) }}
+      </li>
+    </ul>
+    <div v-html=\\"stryMutAct_9fa48('46') ? html && '<br>' : stryMutAct_9fa48('45') ? false : stryMutAct_9fa48('44') ? true : (stryCov_9fa48('44', '45', '46'), html || (stryMutAct_9fa48('47') ? '' : (stryCov_9fa48('47'), '<br>')))\\"></div>
+    <div v-text=\\"loading ? stryMutAct_9fa48('48') ? '' : (stryCov_9fa48('48'), 'Loading') : title\\"></div>
+  </section>
+  <section>
+    <input v-model=\\"title\\" :ref=\\"(el) => el && count + 1\\" v-focus=\\"count + 2\\" />
+    <List v-slot=\\"{ item = 'none' }\\">{{ item }}</List>
+    <p :[attributeName]=\\"count + 3\\" v-memo=\\"[count > 4]\\" :id></p>
+    <p v-pre>{{ count + 5 }}</p>
+    <p v-bind=\\"{ title: count + 6 }\\" v-on=\\"{ click: () => count + 7 }\\"></p>
+  </section>
+</template>
+
+<script setup lang=\\"ts\\">
+import { ref } from 'vue';
+const count = ref(0);
+const loading = ref(stryMutAct_9fa48(\\"0\\") ? true : (stryCov_9fa48(\\"0\\"), false));
+const title = ref(stryMutAct_9fa48(\\"1\\") ? \\"\\" : (stryCov_9fa48(\\"1\\"), 'Items'));
+const size = 10;
+const html = stryMutAct_9fa48(\\"2\\") ? \\"Stryker was here!\\" : (stryCov_9fa48(\\"2\\"), '');
+const id = stryMutAct_9fa48(\\"3\\") ? \\"\\" : (stryCov_9fa48(\\"3\\"), 'list');
+const attributeName = stryMutAct_9fa48(\\"4\\") ? \\"\\" : (stryCov_9fa48(\\"4\\"), 'title');
+const items = ref(stryMutAct_9fa48(\\"5\\") ? [] : (stryCov_9fa48(\\"5\\"), [stryMutAct_9fa48(\\"6\\") ? {} : (stryCov_9fa48(\\"6\\"), {
+  id: 1,
+  visible: stryMutAct_9fa48(\\"7\\") ? false : (stryCov_9fa48(\\"7\\"), true)
+})]));
+const actions = stryMutAct_9fa48(\\"8\\") ? {} : (stryCov_9fa48(\\"8\\"), {
+  reset: stryMutAct_9fa48(\\"9\\") ? () => undefined : (stryCov_9fa48(\\"9\\"), () => count.value = 0)
+});
+const vFocus = stryMutAct_9fa48(\\"10\\") ? {} : (stryCov_9fa48(\\"10\\"), {
+  mounted: stryMutAct_9fa48(\\"11\\") ? () => undefined : (stryCov_9fa48(\\"11\\"), (el: HTMLElement) => el.focus())
+});
+function reset(value: number) {
+  if (stryMutAct_9fa48(\\"12\\")) {
+    {}
+  } else {
+    stryCov_9fa48(\\"12\\");
+    count.value = value;
+  }
+}
+</script>
+"
+`;

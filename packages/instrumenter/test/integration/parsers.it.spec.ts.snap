@@ -11251,6 +11251,26 @@ async function func() {
 }
 `;
 
+exports[`parsers integration should collect the expressions of a vue template with a \`<script setup>\` block 1`] = `
+Array [
+  "{ active: count > 0 }",
+  "{ width: size + 'px' }",
+  "title.toUpperCase()",
+  "count > 10",
+  "count === 0 && !loading",
+  "count >= 1",
+  "'Total ' + count",
+  "count++",
+  "reset(count - 1)",
+  "actions.reset",
+  "items.filter((i) => i.visible)",
+  "index + 1",
+  "html || '<br>'",
+  "loading ? 'Loading' : title",
+  "item",
+]
+`;
+
 exports[`parsers integration should ignore configuration when parsing ts files 1`] = `
 Object {
   "format": "ts",
