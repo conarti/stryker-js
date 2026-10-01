@@ -2,7 +2,12 @@ import { MutateDescription } from '@stryker-mutator/api/core';
 import { I } from '@stryker-mutator/util';
 import { Logger } from '@stryker-mutator/api/logging';
 
-import { Ast, AstByFormat, AstFormat } from '../syntax/index.js';
+import {
+  Ast,
+  AstByFormat,
+  AstFormat,
+  VueTemplatePosition,
+} from '../syntax/index.js';
 
 import { TransformerOptions } from './transformer-options.js';
 import { transformBabel } from './babel-transformer.js';
@@ -57,4 +62,6 @@ export interface TransformerContext {
   logger: Logger;
   /** Script source was an expression */
   isExpressionContext: boolean;
+  /** Where the expression sits in a vue template, absent everywhere else */
+  templatePosition?: VueTemplatePosition;
 }

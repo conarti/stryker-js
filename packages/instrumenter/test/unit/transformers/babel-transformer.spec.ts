@@ -15,7 +15,10 @@ import { transformBabel } from '../../../src/transformers/babel-transformer.js';
 import { ScriptAst, ScriptFormat } from '../../../src/syntax/index.js';
 import { instrumentationBabelHeader } from '../../../src/util/index.js';
 import { MutantPlacer } from '../../../src/mutant-placers/index.js';
-import { NodeMutator } from '../../../src/mutators/index.js';
+import {
+  NodeMutator,
+  NodeMutatorContext,
+} from '../../../src/mutators/index.js';
 import { Mutable, Mutant } from '../../../src/mutant.js';
 import { createJSAst, createTSAst } from '../../helpers/factories.js';
 
@@ -125,6 +128,47 @@ describe('babel-transformer', () => {
       // Act
       expect(() => act(ast)).throws(
         'example.js:1:0 brokenPlacer could not place mutants with type(s): "Foo".',
+      );
+    });
+  });
+
+  describe('mutator context', () => {
+    let contexts: NodeMutatorContext[];
+
+    beforeEach(() => {
+      contexts = [];
+      mutators = [
+        {
+          name: 'Spy',
+          mutate(_, mutatorContext) {
+            contexts.push(mutatorContext);
+            return [];
+          },
+        },
+      ];
+    });
+
+    it('should not pass a template position by default', () => {
+      act(createJSAst({ rawContent: 'foo;' }));
+
+      expect(contexts).not.empty;
+      contexts.forEach((mutatorContext) =>
+        expect(mutatorContext).deep.eq({ isExpressionContext: false }),
+      );
+    });
+
+    it('should pass the template position of the transformer context', () => {
+      context.isExpressionContext = true;
+      context.templatePosition = { kind: 'bind', argument: 'disabled' };
+
+      act(createJSAst({ rawContent: 'foo;' }));
+
+      expect(contexts).not.empty;
+      contexts.forEach((mutatorContext) =>
+        expect(mutatorContext).deep.eq({
+          isExpressionContext: true,
+          templatePosition: { kind: 'bind', argument: 'disabled' },
+        }),
       );
     });
   });

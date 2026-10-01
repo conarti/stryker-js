@@ -539,6 +539,27 @@ const label = 'hello';
       expect(usedContext.options.noHeader).true;
     });
 
+    it('should pass the template position of each expression to the transform', async () => {
+      const vue =
+        await parseSfc(`<template><p v-if="a" :disabled="b">{{ c }}</p></template>
+<script setup>
+const a = 1;
+</script>
+`);
+
+      transformVue(vue, mutantCollector, context);
+
+      const [setupContext, ...templateContexts] = context.transform.args.map(
+        ([, , usedContext]) => usedContext,
+      );
+      expect(setupContext.templatePosition).undefined;
+      expect(templateContexts.map((used) => used.templatePosition)).deep.eq([
+        { kind: 'if' },
+        { kind: 'bind', argument: 'disabled' },
+        { kind: 'interpolation' },
+      ]);
+    });
+
     it('should only keep the template expressions in which a mutant was placed', async () => {
       const vue =
         await parseSfc(`<template><p :title="first">{{ second }}{{ third }}</p></template>

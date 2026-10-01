@@ -12,6 +12,8 @@ import {
   VueAst,
   VueRootNode,
   VueSetupScript,
+  VueTemplatePosition,
+  VueTemplatePositionKind,
 } from '../syntax/index.js';
 import { PositionConverter } from '../util/index.js';
 
@@ -92,6 +94,20 @@ const EXPRESSION_DIRECTIVES = Object.freeze([
   'show',
   'html',
   'text',
+]);
+/* The template position of every directive of which the expression is collected */
+const POSITION_KINDS: ReadonlyMap<string, VueTemplatePositionKind> = new Map<
+  string,
+  VueTemplatePositionKind
+>([
+  ['if', 'if'],
+  ['else-if', 'else-if'],
+  ['show', 'show'],
+  ['html', 'html'],
+  ['text', 'text'],
+  ['for', 'for'],
+  ['bind', 'bind'],
+  ['on', 'on'],
 ]);
 const EXCLUDED_BIND_ARGUMENTS = Object.freeze(['key', 'ref']);
 const TRANSITION_TAGS = Object.freeze([
@@ -267,6 +283,7 @@ interface TemplateExpression {
   quoteOffset?: number;
   isEventHandler: boolean;
   isOnTransition: boolean;
+  position: VueTemplatePosition;
 }
 
 async function collectTemplateScripts(
@@ -336,6 +353,7 @@ async function collectTemplateScripts(
     quoteOffset,
     isEventHandler,
     isOnTransition,
+    position,
   }: TemplateExpression): Promise<TemplateScript | string> {
     const start = node.loc.start.offset;
     const end = node.loc.end.offset;
@@ -389,6 +407,7 @@ async function collectTemplateScripts(
       ast: { ...ast, offset: positionConverter.positionFromOffset(codeStart) },
       range: { start, end },
       isExpression: true,
+      templatePosition: position,
       ...(quote && { quote }),
       ...(protectedNodes && { protectedNodes }),
     };
@@ -404,18 +423,24 @@ function collectExpressions(
       node: node.content,
       isEventHandler: false,
       isOnTransition: false,
+      position: { kind: 'interpolation' },
     });
   }
   if (node.type === NODE_TYPE_ELEMENT) {
     const isOnTransition = TRANSITION_TAGS.includes(node.tag!);
     for (const prop of node.props ?? []) {
       const expression = directiveExpression(prop);
-      if (expression) {
+      const kind = POSITION_KINDS.get(prop.name);
+      if (expression && kind) {
         expressions.push({
           node: expression,
           quoteOffset: prop.exp!.loc.start.offset - 1,
           isEventHandler: prop.name === 'on',
           isOnTransition,
+          position: {
+            kind,
+            ...(prop.arg?.isStatic && { argument: prop.arg.content }),
+          },
         });
       }
     }

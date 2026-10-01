@@ -15,7 +15,11 @@ import {
   throwPlacementError,
 } from '../mutant-placers/index.js';
 import { Mutable, Mutant } from '../mutant.js';
-import { allMutators, type NodeMutator } from '../mutators/index.js';
+import {
+  allMutators,
+  type NodeMutator,
+  type NodeMutatorContext,
+} from '../mutators/index.js';
 
 import { DirectiveBookkeeper } from './directive-bookkeeper.js';
 import { IgnorerBookkeeper } from './ignorer-bookkeeper.js';
@@ -43,7 +47,7 @@ export type BabelTransformer = (
 export const transformBabel: BabelTransformer = (
   { root, originFileName, rawContent, offset },
   mutantCollector,
-  { options, mutateDescription, logger, isExpressionContext },
+  { options, mutateDescription, logger, isExpressionContext, templatePosition },
   mutators = allMutators,
   mutantPlacers = allMutantPlacers,
 ) => {
@@ -74,6 +78,9 @@ export const transformBabel: BabelTransformer = (
 
   // Mutant-filter bookkeeping. When no mutator declares a `filter` we bypass
   // all of this and traversal cost matches the unfiltered case.
+  const mutatorContext: NodeMutatorContext = templatePosition
+    ? { isExpressionContext, templatePosition }
+    : { isExpressionContext };
   const mutatorsByName = new Map(mutators.map((m) => [m.name, m] as const));
   const hasAnyMutatorFilter = mutators.some((mutator) => mutator.filter);
   // Stack of `mutantCollector.mutants.length` captured on enter. The slice
@@ -268,7 +275,7 @@ export const transformBabel: BabelTransformer = (
    */
   function* mutate(node: NodePath): Iterable<Mutable> {
     for (const mutator of mutators) {
-      for (const replacement of mutator.mutate(node, { isExpressionContext })) {
+      for (const replacement of mutator.mutate(node, mutatorContext)) {
         yield {
           replacement,
           mutatorName: mutator.name,

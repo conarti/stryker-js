@@ -141,6 +141,32 @@ export interface TemplateScript {
    * or the nodes that were synthesized around it.
    */
   protectedNodes?: WeakSet<babelTypes.Node>;
+  /**
+   * Where a vue template expression sits in the template. Absent for scripts.
+   */
+  templatePosition?: VueTemplatePosition;
+}
+
+/**
+ * The directive a vue template expression belongs to, `interpolation` for `{{ }}`.
+ */
+export type VueTemplatePositionKind =
+  | 'bind'
+  | 'else-if'
+  | 'for'
+  | 'html'
+  | 'if'
+  | 'interpolation'
+  | 'on'
+  | 'show'
+  | 'text';
+
+export interface VueTemplatePosition {
+  kind: VueTemplatePositionKind;
+  /**
+   * The static argument of `v-bind` and `v-on`, for example `disabled` for `:disabled`.
+   */
+  argument?: string;
 }
 
 export interface Range {

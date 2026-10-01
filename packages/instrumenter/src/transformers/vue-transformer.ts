@@ -342,15 +342,19 @@ function transformTemplateScripts(
   };
   vue.root.templateScripts = vue.root.templateScripts.filter((script) => {
     const mutantsBefore = mutantCollector.mutants.length;
+    const scriptContext: TransformerContext = {
+      ...expressionContext,
+      templatePosition: script.templatePosition,
+    };
     if (script.protectedNodes) {
       transformBabel(
         script.ast,
         mutantCollector,
-        expressionContext,
+        scriptContext,
         guardMutators(protectedNodesOf(script.protectedNodes, script.ast)),
       );
     } else {
-      context.transform(script.ast, mutantCollector, expressionContext);
+      context.transform(script.ast, mutantCollector, scriptContext);
     }
     const placedMutants = mutantCollector.mutants
       .slice(mutantsBefore)

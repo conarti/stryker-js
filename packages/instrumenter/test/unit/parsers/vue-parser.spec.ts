@@ -379,6 +379,50 @@ describe('vue-parser', () => {
         });
       });
 
+      (
+        [
+          ['an interpolation', '<p>{{ a }}</p>', { kind: 'interpolation' }],
+          ['v-if', '<p v-if="a"></p>', { kind: 'if' }],
+          [
+            'v-else-if',
+            '<p v-if="a"></p><p v-else-if="b"></p>',
+            { kind: 'else-if' },
+          ],
+          ['v-show', '<p v-show="a"></p>', { kind: 'show' }],
+          ['v-html', '<p v-html="a"></p>', { kind: 'html' }],
+          ['v-text', '<p v-text="a"></p>', { kind: 'text' }],
+          ['v-for', '<p v-for="item in items"></p>', { kind: 'for' }],
+          [
+            'v-bind',
+            '<p :disabled="a"></p>',
+            { kind: 'bind', argument: 'disabled' },
+          ],
+          ['v-on', '<p @click="a++"></p>', { kind: 'on', argument: 'click' }],
+        ] as const
+      ).forEach(([description, template, expected]) => {
+        it(`should record the template position of ${description}`, async () => {
+          const { vueAst } = await parseTemplate(template);
+
+          const { templateScripts } = vueAst.root;
+          expect(
+            templateScripts[templateScripts.length - 1].templatePosition,
+          ).deep.eq(expected);
+        });
+      });
+
+      it('should not collect a binding with a dynamic argument, so no argument is recorded for it', async () => {
+        /* `directiveExpression` skips a dynamic argument, and the position only records a static one */
+        const { vueAst } = await parseTemplate('<p :[disabled]="x"></p>');
+
+        expect(vueAst.root.templateScripts).deep.eq([]);
+      });
+
+      it('should not record a template position for a script block', async () => {
+        const { vueAst } = await parseTemplate('<p>{{ a }}</p>');
+
+        expect(vueAst.root.additionalScripts[0].templatePosition).undefined;
+      });
+
       it('should derive the quote of a directive from the attribute delimiter', async () => {
         const { vueAst } = await parseTemplate(
           `<p :title="a" :lang='b'>{{ c }}</p>`,
