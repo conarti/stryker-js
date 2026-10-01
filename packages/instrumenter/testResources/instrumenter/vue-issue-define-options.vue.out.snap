@@ -54,7 +54,7 @@ function stryMutAct_9fa48(id) {
 <template>
   <label class=\\"field\\">
     <span>{{ label }}</span>
-    <input v-if=\\"editable\\" :value=\\"value\\" type=\\"text\\" />
+    <input v-if=\\"stryMutAct_9fa48('7') ? false : stryMutAct_9fa48('6') ? true : (stryCov_9fa48('6', '7'), editable)\\" :value=\\"value\\" type=\\"text\\" />
     <span v-else>{{ value }}</span>
   </label>
 </template>

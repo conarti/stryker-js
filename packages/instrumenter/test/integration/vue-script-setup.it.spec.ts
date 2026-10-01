@@ -31,6 +31,7 @@ const scriptSetupFixtures = Object.freeze([
   'vue-script-setup-first.vue',
   'vue-template-expressions.vue',
   'vue-template-expressions-generic.vue',
+  'vue-template-handlers.vue',
   'vue-issue-define-model.vue',
   'vue-issue-define-options.vue',
   'vue-issue-define-props.vue',
@@ -178,6 +179,56 @@ describe('vue script setup integration', () => {
     }
   });
 
+  describe('the instrumented vue-template-handlers.vue', () => {
+    for (const inlineTemplate of [true, false]) {
+      it(`should keep every handler that vue calls a function a function with inlineTemplate ${inlineTemplate}`, async () => {
+        const fixture = 'vue-template-handlers.vue';
+        const original = await fsPromises.readFile(
+          resolveTestResource('instrumenter', fixture),
+          'utf-8',
+        );
+        const instrumented = await instrument(fixture);
+
+        const originalHandlers = compiledHandlersOf(
+          original,
+          fixture,
+          inlineTemplate,
+        );
+        const instrumentedHandlers = compiledHandlersOf(
+          instrumented,
+          fixture,
+          inlineTemplate,
+        );
+
+        expect(instrumentedHandlers).lengthOf(originalHandlers.length);
+        expect(instrumentedHandlers.map(isInlineStatementHandler)).deep.eq(
+          originalHandlers.map(isInlineStatementHandler),
+        );
+        /* The member handlers, the `.prevent` one, the `.enter` one and the one inside `v-for` */
+        expect(
+          instrumentedHandlers.filter((handler) =>
+            handler.includes('(...stryArgs_9fa48) =>'),
+          ),
+        ).lengthOf(7);
+        /* The handler of the transition hook is left alone */
+        expect(instrumentedHandlers.at(-1)).match(
+          /^[\w$.()]*actions\)?\.done$/,
+        );
+        /*
+         * Vue doesn't cache a member handler that refers to the template scope and passes it as it is written,
+         * so it is called without `this` and keeps its own `Function.length`. The wrapper binds `this` and has a length of 0.
+         */
+        const scopedIndex = originalHandlers.findIndex((handler) =>
+          /^[\w$.()]*item\.remove$/.test(handler),
+        );
+        expect(scopedIndex).gte(0);
+        expect(instrumentedHandlers[scopedIndex]).match(
+          /^\(\.\.\.stryArgs_9fa48\) => .*item\.remove\(\.\.\.stryArgs_9fa48\)\)$/,
+        );
+      });
+    }
+  });
+
   for (const [fixture, declaration] of [
     ['vue-script-setup-bare-define-props.vue', 'props:'],
     ['vue-script-setup-bare-define-emits.vue', 'emits:'],
@@ -239,6 +290,44 @@ describe('vue script setup integration', () => {
     );
   }
 });
+
+/**
+ * The values the compiler generated for the event handlers of the template, in template order.
+ */
+function compiledHandlersOf(
+  source: string,
+  fileName: string,
+  inlineTemplate: boolean,
+): string[] {
+  const { descriptor } = parse(source, { filename: fileName });
+  const script = compileScript(descriptor, { id: fileName, inlineTemplate });
+  const render = inlineTemplate
+    ? script.content
+    : compileTemplate({
+        id: fileName,
+        filename: fileName,
+        source: descriptor.template!.content,
+        compilerOptions: {
+          bindingMetadata: script.bindings,
+          expressionPlugins: ['typescript'],
+          isTS: true,
+        },
+      }).code;
+  return [
+    ...render
+      .replace(/\s*\/\/@ts-ignore\s*/g, '')
+      .matchAll(
+        /\bon[A-Z][\w]*: (?:_cache\[\d+\] \|\| \(_cache\[\d+\] = )?(.*)$/gm,
+      ),
+  ].map(([, handler]) => handler);
+}
+
+/**
+ * Vue wraps an inline statement in a function that takes the event, it passes any other handler as it is.
+ */
+function isInlineStatementHandler(compiledHandler: string): boolean {
+  return /^\(\$event(?:: any)?\) =>/.test(compiledHandler);
+}
 
 /**
  * The names of the props the compiler declared, in the order it declared them.

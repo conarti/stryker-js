@@ -14,6 +14,7 @@ import {
 import { parse as parseVue } from '../../../src/parsers/vue-parser.js';
 import { createParser } from '../../../src/parsers/index.js';
 import { print } from '../../../src/printers/index.js';
+import { generateTemplateExpression } from '../../../src/printers/vue-printer.js';
 import { Mutant } from '../../../src/mutant.js';
 import {
   AstFormat,
@@ -697,24 +698,154 @@ export default { data: () => ({ label: 'hello' }) };
       expect(templateMutantsOf('ArithmeticOperator')).lengthOf(1);
     });
 
-    for (const handler of [
-      'obj.submit',
-      'items.reverse',
-      'submit',
-      'obj?.handler',
-    ]) {
-      it(`should not mutate the member handler \`${handler}\` nor the wrapper around it`, async () => {
+    (
+      [
+        /* Member handlers, emptied in the body of the synthesized wrapper */
+        [
+          'submit',
+          ['VueEventHandler'],
+          "(...stryArgs_9fa48) => stryMutAct_9fa48('0') ? undefined : (stryCov_9fa48('0'), submit(...stryArgs_9fa48))",
+        ],
+        [
+          'obj.submit',
+          ['VueEventHandler'],
+          "(...stryArgs_9fa48) => stryMutAct_9fa48('0') ? undefined : (stryCov_9fa48('0'), obj.submit(...stryArgs_9fa48))",
+        ],
+        [
+          'items.reverse',
+          ['VueEventHandler'],
+          "(...stryArgs_9fa48) => stryMutAct_9fa48('0') ? undefined : (stryCov_9fa48('0'), items.reverse(...stryArgs_9fa48))",
+        ],
+        [
+          'obj?.handler',
+          ['VueEventHandler'],
+          "(...stryArgs_9fa48) => stryMutAct_9fa48('0') ? undefined : (stryCov_9fa48('0'), obj?.handler(...stryArgs_9fa48))",
+        ],
+        [
+          'obj!.handler',
+          ['VueEventHandler'],
+          "(...stryArgs_9fa48) => stryMutAct_9fa48('0') ? undefined : (stryCov_9fa48('0'), obj!.handler(...stryArgs_9fa48))",
+        ],
+        /* Functions, emptied in their own body */
+        [
+          '() => x++',
+          ['UpdateOperator', 'VueEventHandler'],
+          "() => stryMutAct_9fa48('1') ? undefined : stryMutAct_9fa48('0') ? x-- : (stryCov_9fa48('0', '1'), x++)",
+        ],
+        [
+          'async () => await save()',
+          ['CallExpression', 'VueEventHandler'],
+          "async () => stryMutAct_9fa48('0') ? undefined : (stryCov_9fa48('0'), await (stryMutAct_9fa48('1') ? void 0 : (stryCov_9fa48('1'), save())))",
+        ],
+        [
+          '(() => x++)',
+          ['UpdateOperator', 'VueEventHandler'],
+          "() => stryMutAct_9fa48('1') ? undefined : stryMutAct_9fa48('0') ? x-- : (stryCov_9fa48('0', '1'), x++)",
+        ],
+        [
+          '() => { x++ }',
+          ['BlockStatement', 'UpdateOperator'],
+          "() => { if (stryMutAct_9fa48('0')) { {} } else { stryCov_9fa48('0'); stryMutAct_9fa48('1') ? x-- : (stryCov_9fa48('1'), x++); } }",
+        ],
+        /* Inline statements, emptied at their root */
+        [
+          'x++',
+          ['UpdateOperator', 'VueEventHandler'],
+          "stryMutAct_9fa48('1') ? undefined : stryMutAct_9fa48('0') ? x-- : (stryCov_9fa48('0', '1'), x++)",
+        ],
+        [
+          'select(id)',
+          ['VueEventHandler'],
+          "stryMutAct_9fa48('1') ? undefined : (stryCov_9fa48('1'), select(id))",
+        ],
+        [
+          'handle($event)',
+          ['VueEventHandler'],
+          "stryMutAct_9fa48('1') ? undefined : (stryCov_9fa48('1'), handle($event))",
+        ],
+      ] as const
+    ).forEach(([handler, mutatorNames, printed]) => {
+      it(`should place the mutants of \`${handler}\` where vue keeps calling the handler`, async () => {
         const vue = await parseSfc(
-          `<template><button @click="${handler}"></button></template>\n<script setup>\nconst x = 1;\n</script>\n`,
+          `<template><button @click="${handler}"></button></template>\n<script setup lang="ts">\nconst x = 1;\n</script>\n`,
         );
 
         transform(vue, mutantCollector, transformerContextStub());
 
-        /* `obj?.handler` is the protected root itself, so not even its optional chaining is mutated */
-        expect(mutantCollector.mutants).lengthOf(0);
-        expect(vue.root.templateScripts).lengthOf(0);
+        expect(
+          mutantCollector.mutants
+            .filter(({ ignoreReason }) => !ignoreReason)
+            .map(({ mutatorName }) => mutatorName)
+            .sort(),
+        ).deep.eq(mutatorNames);
+        const [script] = vue.root.templateScripts;
+        expect(generateTemplateExpression(script)).eq(printed);
       });
-    }
+    });
+
+    it('should not place a VueBooleanBinding mutant on a binding with a dynamic argument', async () => {
+      const vue = await parseSfc(
+        '<template><p :[disabled]="x"></p></template>\n<script setup>\nconst x = 1;\n</script>\n',
+      );
+
+      transform(vue, mutantCollector, transformerContextStub());
+
+      expect(templateMutantsOf('VueBooleanBinding')).lengthOf(0);
+    });
+
+    it('should keep a member handler on a transition without mutants', async () => {
+      const vue = await parseSfc(
+        '<template><Transition @after-enter="obj.done"><p></p></Transition></template>\n<script setup>\nconst x = 1;\n</script>\n',
+      );
+
+      transform(vue, mutantCollector, transformerContextStub());
+
+      expect(mutantCollector.mutants).lengthOf(0);
+      expect(vue.root.templateScripts).lengthOf(0);
+    });
+
+    it('should keep a member handler unmutated when VueEventHandler is excluded', async () => {
+      const vue = await parseSfc(
+        '<template><button @click="obj.submit"></button></template>\n<script setup>\nconst x = 1;\n</script>\n',
+      );
+      const excludingContext = transformerContextStub();
+      excludingContext.options.excludedMutations = ['VueEventHandler'];
+
+      transform(vue, mutantCollector, excludingContext);
+
+      expect(
+        mutantCollector.mutants.map(({ mutatorName }) => mutatorName),
+      ).deep.eq(['VueEventHandler']);
+      expect(mutantCollector.mutants[0].ignoreReason).ok;
+      expect(vue.root.templateScripts).lengthOf(0);
+    });
+
+    it('should keep the CallExpression mutant of an inline call when VueEventHandler is excluded', async () => {
+      const vue = await parseSfc(
+        '<template><button @click="select(id)"></button></template>\n<script setup>\nconst x = 1;\n</script>\n',
+      );
+      const excludingContext = transformerContextStub();
+      excludingContext.options.excludedMutations = ['VueEventHandler'];
+
+      transform(vue, mutantCollector, excludingContext);
+
+      expect(templateMutantsOf('CallExpression')).lengthOf(1);
+      expect(templateMutantsOf('CallExpression')[0].ignoreReason).undefined;
+    });
+
+    it('should report the range of the attribute value for a mutant in the wrapper of a member handler', async () => {
+      const vue = await parseSfc(
+        '<template><button @click="obj.submit"></button></template>\n<script setup>\nconst x = 1;\n</script>\n',
+      );
+
+      transform(vue, mutantCollector, transformerContextStub());
+
+      const [mutant] = templateMutantsOf('VueEventHandler');
+      expect(mutant.toApiMutant().location).deep.eq({
+        start: { line: 0, column: 26 },
+        end: { line: 0, column: 36 },
+      });
+    });
 
     it('should still ignore the excluded mutations', async () => {
       const vue = await parseSfc(

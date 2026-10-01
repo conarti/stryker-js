@@ -15,6 +15,7 @@ import {
 import { placeHeader } from '../util/syntax-helpers.js';
 import { generateTemplateExpression } from '../printers/vue-printer.js';
 import { allMutators, type NodeMutator } from '../mutators/index.js';
+import { vueEventHandlerMutator } from '../mutators/vue-event-handler-mutator.js';
 
 import { AstTransformer, TransformerContext } from './index.js';
 import { MutantCollector } from './mutant-collector.js';
@@ -403,16 +404,22 @@ function protectedNodesOf(
 /**
  * Keeps the mutators as they are, `name` and `filter` included, but lets them skip the protected nodes.
  * The nodes below a protected node are still mutated.
+ * `VueEventHandler` is left unguarded, the synthesized call of a member handler is exactly what it empties.
+ * It never replaces the root of a function or member handler by itself.
  */
 function guardMutators(protectedNodes: WeakSet<types.Node>): NodeMutator[] {
-  return allMutators.map((mutator) => ({
-    ...mutator,
-    *mutate(path, mutatorContext) {
-      if (!protectedNodes.has(path.node)) {
-        yield* mutator.mutate(path, mutatorContext);
-      }
-    },
-  }));
+  return allMutators.map((mutator) =>
+    mutator === vueEventHandlerMutator
+      ? mutator
+      : {
+          ...mutator,
+          *mutate(path, mutatorContext) {
+            if (!protectedNodes.has(path.node)) {
+              yield* mutator.mutate(path, mutatorContext);
+            }
+          },
+        },
+  );
 }
 
 /**

@@ -299,3 +299,26 @@ export function placeHeader(root: babel.types.File): void {
   }
   root.program.body.unshift(...header);
 }
+
+const BOOLEAN_OPERATORS = Object.freeze([
+  '!=',
+  '!==',
+  '&&',
+  '<',
+  '<=',
+  '==',
+  '===',
+  '>',
+  '>=',
+  '||',
+]);
+
+/**
+ * Whether the node is a comparison or a logical expression, which `ConditionalExpression` replaces with `true` and `false`.
+ */
+export function isBooleanExpression(path: babel.NodePath): boolean {
+  return (
+    (path.isBinaryExpression() || path.isLogicalExpression()) &&
+    BOOLEAN_OPERATORS.includes(path.node.operator)
+  );
+}

@@ -83,3 +83,36 @@ function nodeSet(ast: babel.types.Node, parentPath?: babel.NodePath) {
   );
   return set;
 }
+
+/**
+ * Expects that no two mutators replace the same node with the same code.
+ */
+export function expectNoDuplicateMutations(
+  mutators: NodeMutator[],
+  originalCode: string,
+  nodeMutatorContext: NodeMutatorContext,
+): void {
+  const ast = parse(originalCode, {
+    sourceFilename: 'source.js',
+    plugins,
+    sourceType: 'module',
+  });
+  const mutatorsByMutation = new Map<string, string[]>();
+  babel.traverse(ast, {
+    enter(path: babel.NodePath) {
+      for (const mutator of mutators) {
+        for (const replacement of mutator.mutate(path, nodeMutatorContext)) {
+          const mutation = `${path.node.start}-${path.node.end}: ${generator(replacement).code}`;
+          mutatorsByMutation.set(mutation, [
+            ...(mutatorsByMutation.get(mutation) ?? []),
+            mutator.name,
+          ]);
+        }
+      }
+    },
+  });
+  const duplicates = [...mutatorsByMutation].filter(
+    ([, names]) => names.length > 1,
+  );
+  expect(duplicates).deep.eq([]);
+}

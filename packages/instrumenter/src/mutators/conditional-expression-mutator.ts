@@ -1,22 +1,9 @@
 import * as babel from '@babel/core';
 import { type NodePath } from '@babel/core';
 
-import { deepCloneNode } from '../util/index.js';
+import { deepCloneNode, isBooleanExpression } from '../util/index.js';
 
 import { NodeMutator } from './node-mutator.js';
-
-const booleanOperators = Object.freeze([
-  '!=',
-  '!==',
-  '&&',
-  '<',
-  '<=',
-  '==',
-  '===',
-  '>',
-  '>=',
-  '||',
-]);
 
 const { types } = babel;
 
@@ -82,12 +69,5 @@ function isTestOfCondition(path: NodePath): boolean {
   return (
     parentPath.isIfStatement() /*|| parentPath.isConditionalExpression()*/ &&
     parentPath.node.test === path.node
-  );
-}
-
-function isBooleanExpression(path: NodePath) {
-  return (
-    (path.isBinaryExpression() || path.isLogicalExpression()) &&
-    booleanOperators.includes(path.node.operator)
   );
 }

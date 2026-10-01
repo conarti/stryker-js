@@ -1,11 +1,8 @@
 // Jest Snapshot v1, https://goo.gl/fbAQLP
 
 exports[`instrumenter integration should be able to instrument a vue script setup sample 1`] = `
-"<template>
-  <button type=\\"button\\" @click=\\"increment\\">{{ count }}</button>
-</template>
+"<script>
 
-<script setup>
 function stryNS_9fa48() {
   var g = typeof globalThis === 'object' && globalThis && globalThis.Math === Math && globalThis || new Function(\\"return this\\")();
   var ns = g.__stryker__ || (g.__stryker__ = {});
@@ -52,6 +49,13 @@ function stryMutAct_9fa48(id) {
   stryMutAct_9fa48 = isActive;
   return isActive(id);
 }
+
+</script>
+<template>
+  <button type=\\"button\\" @click=\\"(...stryArgs_9fa48) => stryMutAct_9fa48('2') ? undefined : (stryCov_9fa48('2'), increment(...stryArgs_9fa48))\\">{{ count }}</button>
+</template>
+
+<script setup>
 import { ref } from 'vue';
 const count = ref(0);
 function increment() {

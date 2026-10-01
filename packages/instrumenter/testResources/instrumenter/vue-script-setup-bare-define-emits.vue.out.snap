@@ -52,7 +52,7 @@ function stryMutAct_9fa48(id) {
 
 </script>
 <template>
-  <button type=\\"button\\" @click=\\"$emit(stryMutAct_9fa48('2') ? '' : (stryCov_9fa48('2'), 'close'))\\">close</button>
+  <button type=\\"button\\" @click=\\"stryMutAct_9fa48('2') ? undefined : (stryCov_9fa48('2'), $emit(stryMutAct_9fa48('3') ? '' : (stryCov_9fa48('3'), 'close')))\\">close</button>
 </template>
 
 <script setup lang=\\"ts\\">

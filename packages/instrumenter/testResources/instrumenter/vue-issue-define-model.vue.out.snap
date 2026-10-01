@@ -54,10 +54,10 @@ function stryMutAct_9fa48(id) {
 <template>
   <section class=\\"disclosure\\">
     <h2>{{ title }}</h2>
-    <button type=\\"button\\" @click=\\"open = stryMutAct_9fa48('5') ? open : (stryCov_9fa48('5'), !open)\\">
-      {{ open ? stryMutAct_9fa48(\\"6\\") ? \\"\\" : (stryCov_9fa48(\\"6\\"), 'Hide') : stryMutAct_9fa48(\\"7\\") ? \\"\\" : (stryCov_9fa48(\\"7\\"), 'Show') }}
+    <button type=\\"button\\" @click=\\"stryMutAct_9fa48('5') ? undefined : (stryCov_9fa48('5'), open = stryMutAct_9fa48('6') ? open : (stryCov_9fa48('6'), !open))\\">
+      {{ open ? stryMutAct_9fa48(\\"7\\") ? \\"\\" : (stryCov_9fa48(\\"7\\"), 'Hide') : stryMutAct_9fa48(\\"8\\") ? \\"\\" : (stryCov_9fa48(\\"8\\"), 'Show') }}
     </button>
-    <p v-if=\\"open\\">{{ body }}</p>
+    <p v-if=\\"stryMutAct_9fa48('10') ? false : stryMutAct_9fa48('9') ? true : (stryCov_9fa48('9', '10'), open)\\">{{ body }}</p>
   </section>
 </template>
 

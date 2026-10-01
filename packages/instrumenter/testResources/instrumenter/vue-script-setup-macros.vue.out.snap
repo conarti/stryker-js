@@ -52,8 +52,8 @@ function stryMutAct_9fa48(id) {
 
 </script>
 <template>
-  <dialog :open=\\"open\\">
-    <button type=\\"button\\" @click=\\"toggle\\">toggle</button>
+  <dialog :open=\\"stryMutAct_9fa48('6') ? false : stryMutAct_9fa48('5') ? true : (stryCov_9fa48('5', '6'), open)\\">
+    <button type=\\"button\\" @click=\\"(...stryArgs_9fa48) => stryMutAct_9fa48('7') ? undefined : (stryCov_9fa48('7'), toggle(...stryArgs_9fa48))\\">toggle</button>
   </dialog>
 </template>
 

@@ -54,7 +54,7 @@ function stryMutAct_9fa48(id) {
 <template>
   <div class=\\"counter\\">
     <span>{{ props.label }}</span>
-    <em v-if=\\"stryMutAct_9fa48('6') ? props.disabled : (stryCov_9fa48('6'), !props.disabled)\\">{{ props.count }}</em>
+    <em v-if=\\"stryMutAct_9fa48('8') ? false : stryMutAct_9fa48('7') ? true : stryMutAct_9fa48('6') ? props.disabled : (stryCov_9fa48('6', '7', '8'), !props.disabled)\\">{{ props.count }}</em>
   </div>
 </template>
 

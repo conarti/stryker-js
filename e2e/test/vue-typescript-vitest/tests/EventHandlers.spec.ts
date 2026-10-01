@@ -171,13 +171,11 @@ describe('EventHandlers component', () => {
     expect(select.calls).length(1);
     sut.unmount();
   });
-  it('should pass a member handler that refers to the template scope as it is written', async () => {
-    const { sut, form, formObject } = mountHandlers();
-    expect(attachedHandler(sut, '.scoped', 'onClick')).eq(formObject.submit);
-    expect(attachedHandler(sut, '.scoped', 'onClick').length).eq(2);
+  it('should call a member handler that refers to the template scope', async () => {
+    /* Vue passes this handler as it is written, the wrapper changes `this` and `Function.length`, see the instrumenter integration test */
+    const { sut, form } = mountHandlers();
     await sut.find('.scoped').trigger('click');
     expect(form.calls).length(1);
-    expect(form.calls[0].receiver).undefined;
     expect(form.calls[0].args[0]).instanceOf(Event);
     sut.unmount();
   });
@@ -203,6 +201,7 @@ describe('EventHandlers component', () => {
     const { sut, beforeEnter, hooks } = mountHandlers();
     const transition = findVNode(sut.vm.$.subTree, Transition)!;
     expect(transition.props!.onBeforeEnter).eq(hooks.beforeEnter);
+    expect(sut.find('.transition').exists()).false;
     await sut.find('.toggle').trigger('click');
     expect(sut.find('.transition').exists()).true;
     expect(beforeEnter.calls).length(1);

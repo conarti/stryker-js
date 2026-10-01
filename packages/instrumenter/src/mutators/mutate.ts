@@ -16,6 +16,10 @@ import { updateOperatorMutator } from './update-operator-mutator.js';
 import { regexMutator } from './regex-mutator.js';
 import { optionalChainingMutator } from './optional-chaining-mutator.js';
 import { assignmentOperatorMutator } from './assignment-operator-mutator.js';
+import { vueDirectiveConditionMutator } from './vue-directive-condition-mutator.js';
+import { vueForSourceMutator } from './vue-for-source-mutator.js';
+import { vueEventHandlerMutator } from './vue-event-handler-mutator.js';
+import { vueBooleanBindingMutator } from './vue-boolean-binding-mutator.js';
 
 export const allMutators: NodeMutator[] = [
   arithmeticOperatorMutator,
@@ -35,4 +39,8 @@ export const allMutators: NodeMutator[] = [
   regexMutator,
   optionalChainingMutator,
   assignmentOperatorMutator,
+  vueDirectiveConditionMutator,
+  vueForSourceMutator,
+  vueEventHandlerMutator,
+  vueBooleanBindingMutator,
 ];

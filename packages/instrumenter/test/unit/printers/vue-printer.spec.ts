@@ -205,7 +205,10 @@ describe('vue-printer', () => {
       const template =
         '<template><button @click="obj.submit"></button></template>';
 
-      const output = await instrument(`${template}\n${SCRIPT_SETUP}`);
+      /* `VueEventHandler` would empty the handler, excluding it leaves no placed mutant */
+      const output = await instrument(`${template}\n${SCRIPT_SETUP}`, [
+        'VueEventHandler',
+      ]);
 
       expect(templateOf(output)).eq(template);
     });
@@ -214,10 +217,11 @@ describe('vue-printer', () => {
       const output = await instrument(
         '<template><button @click="items[a + b]"></button></template>\n' +
           SCRIPT_SETUP,
+        ['VueEventHandler'],
       );
 
       expect(templateOf(output)).eq(
-        `<template><button @click="(...stryArgs_9fa48) => items[stryMutAct_9fa48('0') ? a - b : (stryCov_9fa48('0'), a + b)](...stryArgs_9fa48)"></button></template>`,
+        `<template><button @click="(...stryArgs_9fa48) => items[stryMutAct_9fa48('1') ? a - b : (stryCov_9fa48('1'), a + b)](...stryArgs_9fa48)"></button></template>`,
       );
     });
 

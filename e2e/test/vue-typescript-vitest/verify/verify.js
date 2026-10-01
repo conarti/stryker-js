@@ -8,9 +8,9 @@ import {
  * The number of mutants expected inside the `<template>` block of each component.
  */
 const expectedTemplateMutants = Object.freeze({
-  'src/TemplatePositions.vue': 21,
+  'src/TemplatePositions.vue': 25,
   'src/TemplateSkipped.vue': 0,
-  'src/EventHandlers.vue': 8,
+  'src/EventHandlers.vue': 22,
 });
 
 /**

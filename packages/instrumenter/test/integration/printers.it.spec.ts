@@ -78,7 +78,10 @@ describe('parse and print integration', () => {
       const negativeSection = (text: string) =>
         text.slice(text.indexOf('  <section>\n'), text.indexOf('</template>'));
       expect(negativeSection(output)).eq(negativeSection(code));
-      expect(output).include('<button type="button" @click="actions.reset">');
+      /* The member handler is wrapped, so vue keeps calling it while `VueEventHandler` can empty it */
+      expect(output).match(
+        /<button type="button" @click="\(\.\.\.stryArgs_9fa48\) => stryMutAct_9fa48\('\d+'\) \? undefined : \(stryCov_9fa48\('\d+'\), actions\.reset\(\.\.\.stryArgs_9fa48\)\)">/,
+      );
     });
   });
 });
