@@ -35,7 +35,7 @@ Stryker also mutates the expressions inside the `<template>` block of a single f
 
 ### What is mutated
 
-The following positions are mutated with the regular mutators, the same ones that mutate your scripts:
+The following positions are mutated with the regular mutators, the same ones that mutate your scripts, and with the [Vue template mutators](#vue-template-mutators):
 
 - interpolations, `{{ expression }}`
 - `v-if`, `v-else-if` and `v-show`
@@ -61,6 +61,29 @@ These positions are never mutated:
 - an inline `v-on` handler with more than one statement, such as `@click="count++; save()"`
 - a handler of a `<Transition>` or `<TransitionGroup>` that refers to a function, such as `@after-enter="onAfterEnter"` (see below)
 
+### Vue template mutators
+
+Besides the regular mutators, four mutators only apply to the template. Each of them only replaces the whole expression of a position (or, for `v-on`, the body of the handler), never a part of it, and stays silent where a regular mutator already produces the same mutant.
+
+| Mutator                 | Position                         | Mutation                                                                                                                                                                                                                                                           |
+| ----------------------- | -------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `VueDirectiveCondition` | `v-if`, `v-else-if` and `v-show` | The condition is replaced with `true` and with `false`, for example `v-if="isOpen"` becomes `v-if="true"` and `v-if="false"`. A comparison or a logical expression such as `a && b` is left to `ConditionalExpression`, and a boolean literal to `BooleanLiteral`. |
+| `VueForSource`          | the source of `v-for`            | The source is replaced with an empty array, `v-for="item in items"` becomes `v-for="item in []"`, so nothing is rendered. An array literal is left to `ArrayDeclaration`.                                                                                          |
+| `VueEventHandler`       | `v-on`                           | The handler is emptied, so it does nothing when the event fires (see [Event handlers](#event-handlers) for where it is placed).                                                                                                                                    |
+| `VueBooleanBinding`     | `v-bind` of a boolean attribute  | The value is replaced with `true` and with `false`, for example `:disabled="busy"` becomes `:disabled="true"` and `:disabled="false"`. A comparison or a logical expression is left to `ConditionalExpression`, and a boolean literal to `BooleanLiteral`.         |
+
+`VueBooleanBinding` only applies to these attribute names, compared without regard to case and hyphens (so `:readOnly` and `:read-only` match `readonly`), on elements and on components alike: `allowfullscreen`, `async`, `autofocus`, `autoplay`, `checked`, `controls`, `default`, `defer`, `disabled`, `formnovalidate`, `hidden`, `inert`, `ismap`, `itemscope`, `loop`, `multiple`, `muted`, `nomodule`, `novalidate`, `open`, `readonly`, `required`, `reversed`, `scoped`, `seamless` and `selected`. This is the list of boolean attributes Vue itself knows.
+
+Like any other mutator, they can be turned off with [`mutator.excludedMutations`](../configuration.md#mutator-mutatordescriptor), for example:
+
+```json
+{
+  "mutator": {
+    "excludedMutations": ["VueEventHandler", "VueBooleanBinding"]
+  }
+}
+```
+
 Comments to disable mutants, such as `<!-- Stryker disable next-line all -->`, are not supported inside the template. They only work in the script blocks, see [Disable mutants](../disable-mutants.md).
 
 ### Warnings
@@ -75,13 +98,13 @@ The positions in the skipped list above are left out silently. They are not erro
 
 Vue decides how to call a `v-on` handler by the text of its expression. `@click="submit"` and `@click="form.submit"` refer to a function that Vue calls with the event, `@click="() => count++"` is a function that Vue calls as it is and `@click="count++"` is an inline statement that Vue wraps in a function of its own. Placing a mutant around such an expression as a whole would change how Vue treats it, and the handler would no longer be called, even without an active mutant. Stryker prevents this:
 
-- For a function expression, only the body of the function is mutated.
-- For an inline statement, the whole expression can be mutated, because Vue treats the mutated expression as an inline statement as well.
-- For a handler that refers to a function (`submit`, `form.submit`, `form?.submit`, `form!.submit`), Stryker places the mutants inside a wrapper, `(...stryArgs_9fa48) => form.submit(...stryArgs_9fa48)`, and never around the reference itself. The wrapper only ends up in the instrumented code when a mutant is placed inside it. None of the regular mutators changes such a reference, so with the regular mutators these handlers produce no mutants at all and no wrapper.
+- For a function expression, only the body of the function is mutated. `VueEventHandler` replaces an expression body with `undefined`, so `@click="() => count++"` becomes `@click="() => undefined"`. A block body, such as `() => { count++ }`, is emptied by `BlockStatement` instead.
+- For an inline statement, the whole expression can be mutated, because Vue treats the mutated expression as an inline statement as well. `VueEventHandler` replaces it with `undefined`, so `@click="count++"` becomes `@click="undefined"`. For a call such as `@click="select(id)"` this replaces the `CallExpression` mutant the call would otherwise get.
+- For a handler that refers to a function (`submit`, `form.submit`, `form?.submit`, `form!.submit`), Stryker places the mutants inside a wrapper, `(...stryArgs_9fa48) => form.submit(...stryArgs_9fa48)`, and never around the reference itself. `VueEventHandler` replaces the call inside the wrapper with `undefined`. The wrapper only ends up in the instrumented code when a mutant is placed inside it, which is the case for every such handler unless `VueEventHandler` is excluded.
 
-The wrapper behaves like the handler Vue generates itself, with three differences:
+The wrapper behaves like the handler Vue generates itself, with three differences. They apply to every handler that refers to a function, since `VueEventHandler` places a mutant in each of them; exclude `VueEventHandler` to keep such handlers exactly as written:
 
-1. `this` and `Function.length`. The wrapper always calls the function on its object (`this` is `form` for `form.submit`) and its `Function.length` is always `0`. On a regular element this is exactly what Vue does on its own, because Vue caches such a handler as `(...args) => form.submit && form.submit(...args)`. Vue does not cache, and passes the function itself, in these cases: a handler on a component, a handler that refers to a variable of the template scope (for example the `item` of a `v-for`), a constant expression, and an element with `v-once`. There Vue calls the function without an object, so `this` is `undefined` and `Function.length` is the number of parameters it declares. Once wrapped, `this` is the object and `Function.length` is `0`.
+1. `this` and `Function.length`. The wrapper always calls the function on its object (`this` is `form` for `form.submit`) and its `Function.length` is always `0`. On a regular element this is exactly what Vue does on its own, because Vue caches such a handler as `(...args) => form.submit && form.submit(...args)`. Vue does not cache, and passes the function itself, in these cases: a handler on a component, a handler that refers to a variable of the template scope (for example the `item` of a `v-for`), a constant expression (for example a function declared in `<script setup>`, such as `@click="submit"` with `function submit() {}`), and an element with `v-once`. There Vue calls the function without an object, so `this` is `undefined` and `Function.length` is the number of parameters it declares. Once wrapped, `this` is the object and `Function.length` is `0`.
 2. `<Transition>` and `<TransitionGroup>` hooks are never wrapped. Vue reads the length of a hook such as `@enter` to decide whether it waits for the `done` callback, so the wrapper would change the transition. Stryker recognizes the tag names `Transition`, `transition`, `TransitionGroup` and `transition-group`, the same ones the Vue compiler knows. A `Transition` imported under another name, or your own component that renders a `Transition`, is not recognized, and its hooks are treated like any other handler on a component.
 3. An optional member handler such as `@click="form?.submit"` gets a listener even when `form` is `null` or `undefined`, where Vue itself attaches none. Calling it is safe, the optional chain returns `undefined`, but the presence of the listener can be observed.
 
